@@ -21,3 +21,8 @@ hooks:
     run: ./scripts/Invoke-PostProvision.ps1
     interactive: true
     continueOnError: false
+  predown:
+    shell: pwsh
+    run: ./scripts/Invoke-PreDown.ps1
+    interactive: true
+    continueOnError: false

@@ -487,24 +487,35 @@ The automation never deletes an active certificate. It resumes one safe pending 
 
 ## Cleanup
 
-Remove Azure resources:
+Generate the non-destructive cleanup plan and then remove Azure resources:
 
 ```powershell
+azd hooks run predown
 azd down --purge
 ```
 
-Purge protection prevents immediate permanent deletion of the Key Vault. Plan for the retention period.
+The `predown` hook writes deterministic `gsa-cleanup-plan.json` and `gsa-cleanup-plan.txt` artifacts under `.azure/<environment>`. It uses only the committed manifest's exact object IDs, blocks stale, missing, drifted, transitional, and unobserved tenant objects, and performs no Microsoft Graph mutation. Set `GSA_PREDOWN_LIVE_GRAPH_READS=true` only when the required read scopes and Graph beta acceptance are available; otherwise Graph-owned actions are conservatively blocked as unobserved. Purge protection prevents immediate permanent deletion of the Key Vault. Plan for the retention period.
 
-Tenant cleanup is intentionally manual:
+Tenant cleanup remains a separate reviewed workflow:
 
-- use the committed manifest as evidence of object IDs, ownership, desired fingerprints, and recorded prior forwarding state, but keep restoration manual until a later cleanup layer adds explicit recovery policy;
+- preserve every reused or unmanaged object and never infer ownership from a display name;
 - remove pilot app-role assignments;
 - remove Quick Access/Private Access applications after confirming no dependent segments;
 - unlink and remove the lab filtering policy;
 - remove Intune trusted-root profiles only after all TLS-inspection certificates using the root are retired;
 - disable or retire the GSA certificate in the portal.
 
-The scripts do not perform destructive tenant-wide replacement or bulk cleanup.
+For a forwarding outage, create an expiring plan before mutation:
+
+```powershell
+./scripts/Invoke-GsaForwardingRecovery.ps1 -Mode DisableForRecovery
+./scripts/Invoke-GsaForwardingRecovery.ps1 -PlanPath .azure/<environment>/gsa-forwarding-recovery-plan.json `
+  -AcknowledgePlanId <reviewed-plan-id> -AcknowledgeTrafficImpact -Execute
+```
+
+After the outage, first preserve the recovery audit and plan, then generate a restore plan from the original captured states with `-Mode RestoreCapturedState -RestorePlanPath <original-plan>`. Applying either plan rereads every exact profile ID and state, rejects stale evidence, requires the exact plan ID, and writes a sanitized audit artifact. The recovery command changes only the forwarding profile `state`; it does not update forwarding rules or Microsoft traffic bypasses.
+
+Break-glass-aware report-only Conditional Access review templates for Internet, Quick Access/private apps, and optional compliant-network scenarios are under [`policies/conditional-access`](policies/conditional-access). They are never imported automatically. The scripts do not perform destructive tenant-wide replacement, broad policy enablement, or bulk cleanup.
 
 ## Client preparation
 
@@ -538,6 +549,8 @@ At minimum:
 | Conditional Access assignment | Graph beta session control; potential 60-90 minute propagation | Policy created disabled with no principals; pilot targeting and enablement require review |
 | Ownership state | Local azd environment schema `1.0.0` | Pending transaction plus atomic committed manifest; ID-based ownership only |
 | Readiness and drift inventory | Graph beta/v1.0 plus CRL HTTP read; connector-group GET APIs currently require `Directory.ReadWrite.All` | Non-mutating text and JSON report; optional CI or change-promotion gate |
+| Cleanup plan | Local ownership manifest plus optional Graph reads | Deterministic JSON/text report during `predown`; no Graph mutation |
+| Forwarding outage recovery | Graph beta forwarding profile state | Separate expiring plan, exact acknowledgement, stale-state checks, captured-state restore, sanitized audit |
 | Traffic, deployment, and remote-network health logs | Graph beta and Microsoft Entra diagnostic settings | Documented monitoring target; no subscription-level diagnostic mutation by default |
 
 Quick Access supports at most 500 segments, and nested group assignment is not supported. Security-profile and Conditional Access propagation can take 60-90 minutes.

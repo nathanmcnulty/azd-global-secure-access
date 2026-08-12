@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0.0",
+  "environment": {
+    "name": "fixture",
+    "subscriptionId": "00000000-0000-0000-0000-000000000001",
+    "tenantId": "00000000-0000-0000-0000-000000000002"
+  },
+  "desiredState": {
+    "fingerprint": "fixture",
+    "configuration": {}
+  },
+  "resources": [
+    {
+      "key": "forwardingProfile:internet",
+      "kind": "Microsoft.Graph/networkAccess/forwardingProfile",
+      "id": "00000000-0000-0000-0000-000000000010",
+      "ownership": "managed",
+      "desiredState": { "state": "enabled", "trafficForwardingType": "internet" },
+      "desiredFingerprint": "fixture",
+      "observedState": { "state": "enabled", "trafficForwardingType": "internet" },
+      "previousMutableState": { "state": "disabled" },
+      "readUri": "/beta/networkAccess/forwardingProfiles/00000000-0000-0000-0000-000000000010"
+    },
+    {
+      "key": "privateApplication:quickaccessapp:fixture",
+      "kind": "Microsoft.Graph/applications",
+      "id": "00000000-0000-0000-0000-000000000020",
+      "ownership": "managed",
+      "desiredState": { "displayName": "Fixture Quick Access" },
+      "desiredFingerprint": "fixture",
+      "observedState": { "displayName": "Fixture Quick Access" },
+      "readUri": "/v1.0/applications/00000000-0000-0000-0000-000000000020"
+    },
+    {
+      "key": "connectorGroup:fixture",
+      "kind": "Microsoft.Graph/onPremisesPublishing/connectorGroup",
+      "id": "00000000-0000-0000-0000-000000000030",
+      "ownership": "reused",
+      "desiredState": { "id": "00000000-0000-0000-0000-000000000030" },
+      "desiredFingerprint": "fixture",
+      "observedState": { "id": "00000000-0000-0000-0000-000000000030" }
+    },
+    {
+      "key": "tlsCertificate:fixture",
+      "kind": "Microsoft.Graph/networkAccess/externalCertificateAuthorityCertificate",
+      "id": "00000000-0000-0000-0000-000000000040",
+      "ownership": "managed",
+      "desiredState": { "status": "active" },
+      "desiredFingerprint": "fixture",
+      "observedState": { "status": "active" }
+    }
+  ],
+  "operation": {
+    "id": "00000000-0000-0000-0000-000000000099",
+    "status": "committed",
+    "completedAt": "2026-08-01T00:00:00.0000000+00:00"
+  }
+}

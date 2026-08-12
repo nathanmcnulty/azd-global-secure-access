@@ -8,6 +8,9 @@ BeforeAll {
     $postProvisionText = Get-Content (Join-Path $repoRoot 'scripts\Invoke-PostProvision.ps1') -Raw
     $preProvisionText = Get-Content (Join-Path $repoRoot 'scripts\Invoke-PreProvision.ps1') -Raw
     $readinessText = Get-Content (Join-Path $repoRoot 'scripts\Test-GsaReadiness.ps1') -Raw
+    $preDownText = Get-Content (Join-Path $repoRoot 'scripts\Invoke-PreDown.ps1') -Raw
+    $cleanupText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Cleanup.psm1') -Raw
+    $recoveryText = Get-Content (Join-Path $repoRoot 'scripts\Invoke-GsaForwardingRecovery.ps1') -Raw
     $stateText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.State.psm1') -Raw
     $commonText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Common.psm1') -Raw
     $certificateText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Certificate.psm1') -Raw
@@ -173,5 +176,26 @@ Describe 'Lifecycle state contract' {
         $commonText | Should -Match 'DeploymentLogs'
         $commonText | Should -Match 'AzureUSGovernment'
         $commonText | Should -Match 'AzureChinaCloud'
+    }
+
+    It 'keeps ordinary azd down non-mutating for Microsoft Graph' {
+        $azureYamlText | Should -Match 'predown:'
+        $azureYamlText | Should -Match 'Invoke-PreDown\.ps1'
+        $preDownText | Should -Not -Match 'Invoke-MgGraphRequest\s+-Method\s+(POST|PATCH|PUT|DELETE)'
+        $preDownText | Should -Match 'performed no Microsoft Graph mutation'
+    }
+
+    It 'binds cleanup to exact managed IDs and preserves reused or active certificate objects' {
+        $cleanupText | Should -Match '\$resource\.ownership -ne ''managed'''
+        $cleanupText | Should -Match 'Names and natural identifiers do not grant deletion authority'
+        $cleanupText | Should -Match 'Active certificates are never deleted'
+        $cleanupText | Should -Match 'Root retirement requires verified replacement overlap'
+    }
+
+    It 'keeps forwarding recovery separate and acknowledgement gated' {
+        $preDownText | Should -Not -Match 'Invoke-GsaForwardingRecovery'
+        $recoveryText | Should -Match 'AcknowledgePlanId must exactly match'
+        $recoveryText | Should -Match 'Assert-GsaPlanCurrent'
+        $recoveryText | Should -Match 'RestoreCapturedState'
     }
 }

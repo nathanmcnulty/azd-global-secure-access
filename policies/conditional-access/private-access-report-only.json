@@ -1,0 +1,31 @@
+{
+  "displayName": "GSA Private Access - report-only pilot",
+  "state": "enabledForReportingButNotEnforced",
+  "conditions": {
+    "applications": {
+      "includeApplications": [
+        "<quick-access-or-private-app-id>"
+      ]
+    },
+    "users": {
+      "includeGroups": [
+        "<pilot-group-object-id>"
+      ],
+      "excludeUsers": [
+        "<emergency-access-account-object-id-1>",
+        "<emergency-access-account-object-id-2>"
+      ]
+    }
+  },
+  "grantControls": {
+    "operator": "AND",
+    "builtInControls": [
+      "mfa"
+    ]
+  },
+  "deploymentNotes": {
+    "templateOnly": true,
+    "automaticMutation": false,
+    "requiredReview": "Confirm the target service principal, pilot users, connector health, application dependencies, and emergency access exclusions before any portal or Graph change."
+  }
+}
