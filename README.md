@@ -71,12 +71,13 @@ The design separates:
 - [Bicep](https://learn.microsoft.com/azure/azure-resource-manager/bicep/install), available through Azure CLI
 - `Az.Accounts` for TLS/CRL operations
 - `Microsoft.Graph.Authentication` for Graph operations
-- Pester 5 for tests
+- Pester 5.7.1 and PSScriptAnalyzer 1.25.0 for the repository validation commands
 
 ```powershell
 Install-Module Az.Accounts -Scope CurrentUser
 Install-Module Microsoft.Graph.Authentication -Scope CurrentUser
-Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser
+Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser
+Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser
 ```
 
 ### Licensing and roles
@@ -317,12 +318,17 @@ azd env get-values | ForEach-Object {
 pwsh ./scripts/Test-GsaReadiness.ps1 -OutputPath ./TestResults/gsa-readiness.json
 ```
 
-The command performs only Graph GET operations, confirms the Graph and Azure tenant IDs match, inventories the three forwarding profiles, verifies the configured connector group has an active connector, and checks deterministic Internet baseline objects when that feature is enabled. It requests `NetworkAccess.Read.All` and, when applicable, `Policy.Read.All`. Connector-group reads currently require the delegated `Directory.ReadWrite.All` scope even though this command does not mutate directory objects. It exits nonzero for failed readiness checks so it can be used as a promotion gate.
+The command performs only Graph GET operations, confirms the Graph and Azure tenant IDs match, inventories the three forwarding profiles, and verifies the configured connector group has an active connector. When the Internet baseline is enabled, it validates the blocked categories, custom profile state and priority, exclusive policy link and logging state, and the disabled, unassigned Conditional Access policy including its target application and filtering-profile session control. It requests `NetworkAccess.Read.All` and, when applicable, `Policy.Read.All`. Connector-group reads currently require the delegated `Directory.ReadWrite.All` scope even though this command does not mutate directory objects. It exits nonzero for failed readiness checks so it can be used as a promotion gate.
 
 ## Validate
 
 ```powershell
 az bicep build --file .\infra\main.bicep
+
+$validationEnvironment = 'ci-validation'
+azd env new $validationEnvironment --no-prompt
+azd env set GSA_ORGANIZATION_NAME 'CI Validation' -e $validationEnvironment
+azd env get-values -e $validationEnvironment | Out-Null
 
 $errors = @()
 Get-ChildItem .\scripts -Recurse -Include *.ps1,*.psm1 | ForEach-Object {
@@ -340,7 +346,7 @@ if ($errors) { $errors; throw 'PowerShell syntax validation failed.' }
 Invoke-Pester .\tests -Output Detailed
 ```
 
-The repository also runs these Bicep, PSScriptAnalyzer, and Pester checks in GitHub Actions for every pull request and push to `main`.
+The repository also loads `azure.yaml` as an `azd` project and runs the Bicep, PSScriptAnalyzer, and Pester checks in GitHub Actions for every pull request and push to `main`. CI pins the tested `azd`, Pester, PSScriptAnalyzer, and `setup-azd` versions for reproducible validation.
 
 After deployment, validate:
 

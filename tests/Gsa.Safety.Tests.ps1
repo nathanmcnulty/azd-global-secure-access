@@ -119,6 +119,7 @@ Describe 'Tenant scope safety contract' {
     It 'keeps readiness validation free of tenant mutations' {
         $readinessText | Should -Match 'NetworkAccess\.Read\.All'
         $readinessText | Should -Match 'Directory\.ReadWrite\.All'
+        $readinessText | Should -Match 'Test-GsaInternetBaseline'
         $readinessText | Should -Not -Match 'Invoke-MgGraphRequest\s+-Method\s+(POST|PATCH|PUT|DELETE)'
     }
 

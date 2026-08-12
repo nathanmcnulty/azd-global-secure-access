@@ -298,6 +298,144 @@ function Get-GsaSingleNamedGraphObject {
     return $namedObjects | Select-Object -First 1
 }
 
+function Assert-GsaInternetFilteringPolicy {
+    param(
+        [Parameter(Mandatory)][object]$Policy,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string[]]$Categories
+    )
+
+    if ($Policy.action -ne 'block') {
+        throw "Filtering policy '$Name' exists with action '$($Policy.action)' instead of 'block'."
+    }
+    $rules = @($Policy.policyRules)
+    $webRules = @($rules | Where-Object {
+        ($_.PSObject.Properties['@odata.type'] -and $_.'@odata.type' -eq '#microsoft.graph.networkaccess.webCategoryFilteringRule') -or
+        ($_.PSObject.Properties['ruleType'] -and $_.ruleType -eq 'webCategory')
+    })
+    if ($rules.Count -ne 1 -or $webRules.Count -ne 1) {
+        throw "Filtering policy '$Name' contains rules outside the single managed web-category rule. Review the policy manually; no rules were removed."
+    }
+    $existingCategories = @($webRules[0].destinations | ForEach-Object { $_.name } | Sort-Object -Unique)
+    if (@(Compare-Object -ReferenceObject $Categories -DifferenceObject $existingCategories).Count -gt 0) {
+        throw "Filtering policy '$Name' categories differ from the requested categories. Existing rules were preserved."
+    }
+}
+
+function Assert-GsaInternetSecurityProfile {
+    param(
+        [Parameter(Mandatory)][object]$SecurityProfile,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][int]$Priority
+    )
+
+    if ($SecurityProfile.state -ne 'enabled' -or [int]$SecurityProfile.priority -ne $Priority) {
+        throw "Filtering profile '$Name' exists with state '$($SecurityProfile.state)' and priority '$($SecurityProfile.priority)'; expected enabled/$Priority."
+    }
+}
+
+function Assert-GsaInternetPolicyLinkSet {
+    param(
+        [Parameter(Mandatory)][object[]]$Links,
+        [Parameter(Mandatory)][string]$PolicyId,
+        [Parameter(Mandatory)][string]$PolicyName,
+        [Parameter(Mandatory)][string]$SecurityProfileName,
+        [Parameter(Mandatory)][int]$Priority
+    )
+
+    $matchingLinks = @($Links | Where-Object { $_.policy.id -eq $PolicyId })
+    if ($matchingLinks.Count -ne 1) {
+        throw "Expected exactly one link from filtering policy '$PolicyName' to '$SecurityProfileName'; found $($matchingLinks.Count)."
+    }
+    if ($Links.Count -ne 1) {
+        throw "Filtering profile '$SecurityProfileName' contains unmanaged policy links. Review the profile manually; no links were removed."
+    }
+    if (
+        [int]$matchingLinks[0].priority -ne $Priority -or
+        $matchingLinks[0].state -ne 'enabled' -or
+        $matchingLinks[0].loggingState -ne 'enabled'
+    ) {
+        throw "The managed policy link in '$SecurityProfileName' has incompatible priority, state, or logging state."
+    }
+}
+
+function Assert-GsaInternetConditionalAccessPolicy {
+    param(
+        [Parameter(Mandatory)][object]$ConditionalAccessPolicy,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$SecurityProfileId
+    )
+
+    $internetResourceAppId = '5dc48733-b5df-475c-a49b-fa307ef00853'
+    $includedPrincipals = @(
+        @($ConditionalAccessPolicy.conditions.users.includeUsers) +
+        @($ConditionalAccessPolicy.conditions.users.includeGroups) +
+        @($ConditionalAccessPolicy.conditions.users.includeRoles)
+    )
+    $includedApplications = @($ConditionalAccessPolicy.conditions.applications.includeApplications)
+    $sessionControl = if (
+        $ConditionalAccessPolicy.PSObject.Properties['sessionControls'] -and
+        $null -ne $ConditionalAccessPolicy.sessionControls -and
+        $ConditionalAccessPolicy.sessionControls.PSObject.Properties['globalSecureAccessFilteringProfile']
+    ) {
+        $ConditionalAccessPolicy.sessionControls.globalSecureAccessFilteringProfile
+    } else {
+        $null
+    }
+    if (
+        $ConditionalAccessPolicy.state -ne 'disabled' -or
+        $includedPrincipals.Count -ne 0 -or
+        $includedApplications.Count -ne 1 -or
+        $includedApplications[0] -ne $internetResourceAppId -or
+        $null -eq $sessionControl -or
+        -not $sessionControl.isEnabled -or
+        $sessionControl.profileId -ne $SecurityProfileId
+    ) {
+        throw "Conditional Access policy '$Name' differs from the disabled, unassigned managed configuration. It was not changed."
+    }
+}
+
+function Test-GsaInternetBaseline {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string[]]$BlockedCategories,
+        [string]$SecurityProfileName = 'GSA POC Baseline Security Profile',
+        [string]$ConditionalAccessPolicyName = 'GSA POC Baseline Internet Access',
+        [ValidateRange(1, 65000)][int]$SecurityProfilePriority = 100,
+        [ValidateRange(1, 65000)][int]$PolicyLinkPriority = 100
+    )
+
+    Assert-GsaPreviewGate -Feature 'Global Secure Access Internet filtering baseline validation' -Enabled $true
+    $categories = @($BlockedCategories | ForEach-Object { ConvertTo-GsaWebCategoryName -Name $_ } | Sort-Object -Unique)
+    if ($categories.Count -eq 0) {
+        throw 'At least one reviewed web category is required.'
+    }
+
+    $policy = Get-GsaSingleNamedGraphObject -CollectionUri '/beta/networkAccess/filteringPolicies' -PropertyName name -Name $Name -ObjectDescription 'filtering policy'
+    if (-not $policy) { throw "Filtering policy '$Name' does not exist." }
+    $policy = Invoke-MgGraphRequest -Method GET -Uri "/beta/networkAccess/filteringPolicies/$($policy.id)?`$expand=policyRules" -OutputType PSObject
+    Assert-GsaInternetFilteringPolicy -Policy $policy -Name $Name -Categories $categories
+
+    $securityProfile = Get-GsaSingleNamedGraphObject -CollectionUri '/beta/networkAccess/filteringProfiles' -PropertyName name -Name $SecurityProfileName -ObjectDescription 'filtering profile'
+    if (-not $securityProfile) { throw "Filtering profile '$SecurityProfileName' does not exist." }
+    Assert-GsaInternetSecurityProfile -SecurityProfile $securityProfile -Name $SecurityProfileName -Priority $SecurityProfilePriority
+
+    $links = @(Get-GsaGraphCollection -Uri "/beta/networkAccess/filteringProfiles/$($securityProfile.id)/policies")
+    Assert-GsaInternetPolicyLinkSet -Links $links -PolicyId $policy.id -PolicyName $Name -SecurityProfileName $SecurityProfileName -Priority $PolicyLinkPriority
+
+    $caPolicy = Get-GsaSingleNamedGraphObject -CollectionUri '/beta/identity/conditionalAccess/policies' -PropertyName displayName -Name $ConditionalAccessPolicyName -ObjectDescription 'Conditional Access policy'
+    if (-not $caPolicy) { throw "Conditional Access policy '$ConditionalAccessPolicyName' does not exist." }
+    Assert-GsaInternetConditionalAccessPolicy -ConditionalAccessPolicy $caPolicy -Name $ConditionalAccessPolicyName -SecurityProfileId $securityProfile.id
+
+    return [pscustomobject]@{
+        FilteringPolicyId = $policy.id
+        SecurityProfileId = $securityProfile.id
+        ConditionalAccessPolicyId = $caPolicy.id
+        BlockedCategories = $categories
+    }
+}
+
 function Set-GsaInternetBaseline {
     [CmdletBinding(SupportsShouldProcess)]
     param(
@@ -351,21 +489,7 @@ function Set-GsaInternetBaseline {
         }
     } else {
         $policy = Invoke-MgGraphRequest -Method GET -Uri "/beta/networkAccess/filteringPolicies/$($policy.id)?`$expand=policyRules" -OutputType PSObject
-        if ($policy.action -ne 'block') {
-            throw "Filtering policy '$Name' exists with action '$($policy.action)' instead of 'block'."
-        }
-        $rules = @($policy.policyRules)
-        $webRules = @($rules | Where-Object {
-            ($_.PSObject.Properties['@odata.type'] -and $_.'@odata.type' -eq '#microsoft.graph.networkaccess.webCategoryFilteringRule') -or
-            ($_.PSObject.Properties['ruleType'] -and $_.ruleType -eq 'webCategory')
-        })
-        if ($rules.Count -ne 1 -or $webRules.Count -ne 1) {
-            throw "Filtering policy '$Name' contains rules outside the single managed web-category rule. Review the policy manually; no rules were removed."
-        }
-        $existingCategories = @($webRules[0].destinations | ForEach-Object { $_.name } | Sort-Object -Unique)
-        if (@(Compare-Object -ReferenceObject $categories -DifferenceObject $existingCategories).Count -gt 0) {
-            throw "Filtering policy '$Name' categories differ from the requested categories. Existing rules were preserved."
-        }
+        Assert-GsaInternetFilteringPolicy -Policy $policy -Name $Name -Categories $categories
     }
 
     $securityProfile = Get-GsaSingleNamedGraphObject -CollectionUri '/beta/networkAccess/filteringProfiles' -PropertyName name -Name $SecurityProfileName -ObjectDescription 'filtering profile'
@@ -382,8 +506,8 @@ function Set-GsaInternetBaseline {
         } else {
             return [pscustomobject]@{ Planned = $true; FilteringPolicyName = $Name; SecurityProfileName = $SecurityProfileName; ConditionalAccessPolicyName = $ConditionalAccessPolicyName }
         }
-    } elseif ($securityProfile.state -ne 'enabled' -or [int]$securityProfile.priority -ne $SecurityProfilePriority) {
-        throw "Filtering profile '$SecurityProfileName' exists with state '$($securityProfile.state)' and priority '$($securityProfile.priority)'; expected enabled/$SecurityProfilePriority."
+    } else {
+        Assert-GsaInternetSecurityProfile -SecurityProfile $securityProfile -Name $SecurityProfileName -Priority $SecurityProfilePriority
     }
 
     $links = @(Get-GsaGraphCollection -Uri "/beta/networkAccess/filteringProfiles/$($securityProfile.id)/policies")
@@ -392,6 +516,9 @@ function Set-GsaInternetBaseline {
         throw "Filtering policy '$Name' is linked to '$SecurityProfileName' more than once."
     }
     if ($matchingLinks.Count -eq 0) {
+        if ($links.Count -gt 0) {
+            throw "Filtering profile '$SecurityProfileName' contains unmanaged policy links. Review the profile manually; no links were added or removed."
+        }
         $body = @{
             '@odata.type' = '#microsoft.graph.networkaccess.filteringPolicyLink'
             priority      = $PolicyLinkPriority
@@ -407,12 +534,8 @@ function Set-GsaInternetBaseline {
         } else {
             return [pscustomobject]@{ Planned = $true; FilteringPolicyName = $Name; SecurityProfileName = $SecurityProfileName; ConditionalAccessPolicyName = $ConditionalAccessPolicyName }
         }
-    } elseif (
-        [int]$matchingLinks[0].priority -ne $PolicyLinkPriority -or
-        $matchingLinks[0].state -ne 'enabled' -or
-        $matchingLinks[0].loggingState -ne 'enabled'
-    ) {
-        throw "The managed policy link in '$SecurityProfileName' has incompatible priority, state, or logging state."
+    } else {
+        Assert-GsaInternetPolicyLinkSet -Links $links -PolicyId $policy.id -PolicyName $Name -SecurityProfileName $SecurityProfileName -Priority $PolicyLinkPriority
     }
 
     $caPolicy = Get-GsaSingleNamedGraphObject -CollectionUri '/beta/identity/conditionalAccess/policies' -PropertyName displayName -Name $ConditionalAccessPolicyName -ObjectDescription 'Conditional Access policy'
@@ -446,32 +569,7 @@ function Set-GsaInternetBaseline {
             return [pscustomobject]@{ Planned = $true; FilteringPolicyName = $Name; SecurityProfileName = $SecurityProfileName; ConditionalAccessPolicyName = $ConditionalAccessPolicyName }
         }
     } else {
-        $includedPrincipals = @(
-            @($caPolicy.conditions.users.includeUsers) +
-            @($caPolicy.conditions.users.includeGroups) +
-            @($caPolicy.conditions.users.includeRoles)
-        )
-        $includedApplications = @($caPolicy.conditions.applications.includeApplications)
-        $sessionControl = if (
-            $caPolicy.PSObject.Properties['sessionControls'] -and
-            $null -ne $caPolicy.sessionControls -and
-            $caPolicy.sessionControls.PSObject.Properties['globalSecureAccessFilteringProfile']
-        ) {
-            $caPolicy.sessionControls.globalSecureAccessFilteringProfile
-        } else {
-            $null
-        }
-        if (
-            $caPolicy.state -ne 'disabled' -or
-            $includedPrincipals.Count -ne 0 -or
-            $includedApplications.Count -ne 1 -or
-            $includedApplications[0] -ne $internetResourceAppId -or
-            $null -eq $sessionControl -or
-            -not $sessionControl.isEnabled -or
-            $sessionControl.profileId -ne $securityProfile.id
-        ) {
-            throw "Conditional Access policy '$ConditionalAccessPolicyName' differs from the disabled, unassigned managed configuration. It was not changed."
-        }
+        Assert-GsaInternetConditionalAccessPolicy -ConditionalAccessPolicy $caPolicy -Name $ConditionalAccessPolicyName -SecurityProfileId $securityProfile.id
     }
 
     return [pscustomobject]@{
@@ -492,5 +590,6 @@ Export-ModuleMember -Function @(
     'Get-GsaTenantStatus',
     'Set-GsaForwardingProfile',
     'Set-GsaInternetBaseline',
-    'Set-GsaPrivateApplication'
+    'Set-GsaPrivateApplication',
+    'Test-GsaInternetBaseline'
 )

@@ -18,12 +18,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Azure Developer CLI
+        uses: Azure/setup-azd@0b7e3a35ab00f2eee7080c845eb39c3f0ebfa553 # v2.4.0
+        with:
+          version: 1.30.0
+
       - name: Install PowerShell test modules
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force
-          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+
+      - name: Load azd template
+        run: |
+          azd env new ci-validation --no-prompt
+          azd env set GSA_ORGANIZATION_NAME "CI Validation" -e ci-validation
+          azd env get-values -e ci-validation > /dev/null
 
       - name: Build Bicep
         run: az bicep build --file ./infra/main.bicep --stdout > /dev/null

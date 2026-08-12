@@ -76,15 +76,17 @@ if (Get-GsaBoolean $env:GSA_ENABLE_INTERNET_BASELINE) {
     $policyName = Get-GsaEnvironmentValue -Name 'GSA_BASELINE_POLICY_NAME' -Default 'GSA POC Baseline Web Filtering'
     $profileName = Get-GsaEnvironmentValue -Name 'GSA_BASELINE_SECURITY_PROFILE_NAME' -Default 'GSA POC Baseline Security Profile'
     $caName = Get-GsaEnvironmentValue -Name 'GSA_BASELINE_CA_POLICY_NAME' -Default 'GSA POC Baseline Internet Access'
-    foreach ($specification in @(
-        @{ Name = 'Internet filtering policy'; Uri = '/beta/networkAccess/filteringPolicies'; Property = 'name'; Value = $policyName },
-        @{ Name = 'Internet security profile'; Uri = '/beta/networkAccess/filteringProfiles'; Property = 'name'; Value = $profileName },
-        @{ Name = 'Internet Conditional Access policy'; Uri = '/beta/identity/conditionalAccess/policies'; Property = 'displayName'; Value = $caName }
-    )) {
-        $escaped = $specification.Value.Replace("'", "''")
-        $filter = [uri]::EscapeDataString("$($specification.Property) eq '$escaped'")
-        $objects = @(Get-GsaGraphCollection -Uri "$($specification.Uri)?`$filter=$filter")
-        Add-GsaReadinessCheck -Name $specification.Name -Status $(if ($objects.Count -eq 1) { 'Pass' } else { 'Fail' }) -Detail "Expected one object named '$($specification.Value)'; found $($objects.Count)."
+    try {
+        Test-GsaInternetBaseline `
+            -Name $policyName `
+            -BlockedCategories (Get-GsaList -Value (Get-GsaEnvironmentValue -Name 'GSA_BASELINE_BLOCKED_CATEGORIES' -Default 'SocialNetworking')) `
+            -SecurityProfileName $profileName `
+            -ConditionalAccessPolicyName $caName `
+            -SecurityProfilePriority ([int](Get-GsaEnvironmentValue -Name 'GSA_BASELINE_SECURITY_PROFILE_PRIORITY' -Default '100')) `
+            -PolicyLinkPriority ([int](Get-GsaEnvironmentValue -Name 'GSA_BASELINE_POLICY_LINK_PRIORITY' -Default '100')) | Out-Null
+        Add-GsaReadinessCheck -Name 'Internet security baseline' -Status 'Pass' -Detail "Validated policy '$policyName', profile '$profileName', and disabled unassigned CA policy '$caName'."
+    } catch {
+        Add-GsaReadinessCheck -Name 'Internet security baseline' -Status 'Fail' -Detail $_.Exception.Message
     }
 }
 

@@ -172,4 +172,65 @@ Describe 'GSA Internet Access baseline' {
         { Set-GsaInternetBaseline -Name 'Baseline Filter' -BlockedCategories 'SocialNetworking' -SecurityProfileName 'Baseline Profile' -ConditionalAccessPolicyName 'Baseline CA' } |
             Should -Throw '*disabled, unassigned managed configuration*'
     }
+
+    It 'fails safely when a reused security profile contains unmanaged policy links' {
+        Mock -ModuleName Gsa.Graph Get-GsaGraphCollection {
+            param($Uri)
+            switch -Regex ($Uri) {
+                '^/beta/networkAccess/filteringPolicies\?' { return @([pscustomobject]@{ id = 'policy-id'; name = 'Baseline Filter' }) }
+                '^/beta/networkAccess/filteringProfiles\?' { return @([pscustomobject]@{ id = 'profile-id'; name = 'Baseline Profile'; state = 'enabled'; priority = 100 }) }
+                '/filteringProfiles/profile-id/policies$' {
+                    return @(
+                        [pscustomobject]@{ policy = [pscustomobject]@{ id = 'policy-id' }; priority = 100; state = 'enabled'; loggingState = 'enabled' },
+                        [pscustomobject]@{ policy = [pscustomobject]@{ id = 'unmanaged-policy-id' }; priority = 200; state = 'enabled'; loggingState = 'enabled' }
+                    )
+                }
+                default { return @() }
+            }
+        }
+        Mock -ModuleName Gsa.Graph Invoke-MgGraphRequest {
+            [pscustomobject]@{
+                id = 'policy-id'; action = 'block'
+                policyRules = @([pscustomobject]@{ ruleType = 'webCategory'; destinations = @([pscustomobject]@{ name = 'SocialNetworking' }) })
+            }
+        }
+
+        { Set-GsaInternetBaseline -Name 'Baseline Filter' -BlockedCategories 'SocialNetworking' -SecurityProfileName 'Baseline Profile' -ConditionalAccessPolicyName 'Baseline CA' } |
+            Should -Throw '*contains unmanaged policy links*'
+    }
+
+    It 'validates the complete baseline through the read-only readiness path' {
+        Mock -ModuleName Gsa.Graph Get-GsaGraphCollection {
+            param($Uri)
+            switch -Regex ($Uri) {
+                '^/beta/networkAccess/filteringPolicies\?' { return @([pscustomobject]@{ id = 'policy-id'; name = 'Baseline Filter' }) }
+                '^/beta/networkAccess/filteringProfiles\?' { return @([pscustomobject]@{ id = 'profile-id'; name = 'Baseline Profile'; state = 'enabled'; priority = 100 }) }
+                '/filteringProfiles/profile-id/policies$' { return @([pscustomobject]@{ policy = [pscustomobject]@{ id = 'policy-id' }; priority = 100; state = 'enabled'; loggingState = 'enabled' }) }
+                '^/beta/identity/conditionalAccess/policies\?' {
+                    return @([pscustomobject]@{
+                        id = 'ca-id'; displayName = 'Baseline CA'; state = 'disabled'
+                        conditions = [pscustomobject]@{
+                            applications = [pscustomobject]@{ includeApplications = @('5dc48733-b5df-475c-a49b-fa307ef00853') }
+                            users = [pscustomobject]@{ includeUsers = @(); includeGroups = @(); includeRoles = @() }
+                        }
+                        sessionControls = [pscustomobject]@{ globalSecureAccessFilteringProfile = [pscustomobject]@{ profileId = 'profile-id'; isEnabled = $true } }
+                    })
+                }
+                default { return @() }
+            }
+        }
+        Mock -ModuleName Gsa.Graph Invoke-MgGraphRequest {
+            [pscustomobject]@{
+                id = 'policy-id'; action = 'block'
+                policyRules = @([pscustomobject]@{ ruleType = 'webCategory'; destinations = @([pscustomobject]@{ name = 'SocialNetworking' }) })
+            }
+        }
+
+        $result = Test-GsaInternetBaseline -Name 'Baseline Filter' -BlockedCategories 'SocialNetworking' -SecurityProfileName 'Baseline Profile' -ConditionalAccessPolicyName 'Baseline CA'
+
+        $result.FilteringPolicyId | Should -Be 'policy-id'
+        $result.SecurityProfileId | Should -Be 'profile-id'
+        $result.ConditionalAccessPolicyId | Should -Be 'ca-id'
+        Assert-MockCalled -ModuleName Gsa.Graph Invoke-MgGraphRequest -ParameterFilter { $Method -eq 'POST' } -Times 0
+    }
 }
