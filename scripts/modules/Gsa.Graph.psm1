@@ -131,6 +131,11 @@ function Set-GsaPrivateApplication {
     }
 
     $connector = Invoke-MgGraphRequest -Method GET -Uri "/beta/onPremisesPublishingProfiles/applicationProxy/connectorGroups/$ConnectorGroupId" -OutputType PSObject
+    $connectors = @(Get-GsaGraphCollection -Uri "/beta/onPremisesPublishingProfiles/applicationProxy/connectorGroups/$ConnectorGroupId/members")
+    $activeConnectors = @($connectors | Where-Object { $_.status -eq 'active' })
+    if ($activeConnectors.Count -eq 0) {
+        throw "Connector group '$($connector.name)' has no active connectors. Install or restore a connector before configuring Private Access."
+    }
     $application = Get-GsaApplicationByDisplayName -DisplayName $DisplayName
     $created = $false
     if (-not $application) {

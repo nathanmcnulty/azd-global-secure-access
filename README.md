@@ -45,6 +45,7 @@ The design separates:
 - Sign and upload the GSA subordinate CA certificate and chain
 - Create/update Intune trusted-root profiles without replacing their existing assignments
 - Optionally create a reviewed Internet Access web-category policy, custom security profile, and disabled Conditional Access policy
+- Run read-only readiness validation that inventories onboarding, forwarding profiles, connector health, and managed Internet policy objects
 
 ## Safety defaults
 
@@ -113,6 +114,8 @@ Current Microsoft guidance requires:
 - the connector registered in the intended tenant and connector group.
 
 Use the connector group object ID for `GSA_CONNECTOR_GROUP_ID`.
+
+The provisioning workflow now verifies that the selected group contains at least one connector whose Graph status is `active`. It stops before creating or changing Private Access configuration when the group has no active connector.
 
 ## Configuration
 
@@ -301,6 +304,21 @@ azd provision
 
 No real subscription or tenant deployment is performed by repository tests.
 
+### Read-only readiness report
+
+After setting the azd environment values, generate a tenant readiness report without making changes:
+
+```powershell
+azd env get-values | ForEach-Object {
+    if ($_ -match '^([^=]+)="(.*)"$') {
+        [Environment]::SetEnvironmentVariable($matches[1], $matches[2])
+    }
+}
+pwsh ./scripts/Test-GsaReadiness.ps1 -OutputPath ./TestResults/gsa-readiness.json
+```
+
+The command performs only Graph GET operations, confirms the Graph and Azure tenant IDs match, inventories the three forwarding profiles, verifies the configured connector group has an active connector, and checks deterministic Internet baseline objects when that feature is enabled. It requests `NetworkAccess.Read.All` and, when applicable, `Policy.Read.All`. Connector-group reads currently require the delegated `Directory.ReadWrite.All` scope even though this command does not mutate directory objects. It exits nonzero for failed readiness checks so it can be used as a promotion gate.
+
 ## Validate
 
 ```powershell
@@ -321,6 +339,8 @@ if ($errors) { $errors; throw 'PowerShell syntax validation failed.' }
 
 Invoke-Pester .\tests -Output Detailed
 ```
+
+The repository also runs these Bicep, PSScriptAnalyzer, and Pester checks in GitHub Actions for every pull request and push to `main`.
 
 After deployment, validate:
 
@@ -440,6 +460,8 @@ At minimum:
 | Custom/Agentic Acquire | Portal workflow | Manual |
 | Threat intelligence baseline | Conflicting documented defaults | Manual |
 | Conditional Access assignment | Graph beta session control; potential 60-90 minute propagation | Policy created disabled with no principals; pilot targeting and enablement require review |
+| Readiness inventory | Graph beta plus CA reads; connector-group GET APIs currently require `Directory.ReadWrite.All` | Non-mutating report; optional CI or change-promotion gate |
+| Traffic, deployment, and remote-network health logs | Graph beta and Microsoft Entra diagnostic settings | Documented monitoring target; no subscription-level diagnostic mutation by default |
 
 Quick Access supports at most 500 segments, and nested group assignment is not supported. Security-profile and Conditional Access propagation can take 60-90 minutes.
 
@@ -453,6 +475,8 @@ Before production use:
 - centralize Key Vault and Storage diagnostics;
 - enable Defender only through the organization's subscription-security process;
 - create alerting for Key Vault signing, certificate expiry, CRL expiry, and policy changes;
+- export `NetworkAccessTraffic`, `RemoteNetworkHealthLogs`, `NetworkAccessAlerts`, audit logs, and deployment logs to the organization's Log Analytics/Sentinel workspace;
+- use the built-in Global Secure Access Sentinel workbook and establish 30-day traffic and remote-network baselines before setting anomaly thresholds;
 - use separate roots for environment or administrative boundaries;
 - document certificate revocation and emergency bypass procedures;
 - validate every beta Graph payload in a test tenant after SDK/API changes;
