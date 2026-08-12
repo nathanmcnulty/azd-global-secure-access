@@ -1,0 +1,57 @@
+name: Validate template
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Azure Developer CLI
+        uses: Azure/setup-azd@0b7e3a35ab00f2eee7080c845eb39c3f0ebfa553 # v2.4.0
+        with:
+          version: 1.30.0
+
+      - name: Install PowerShell test modules
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+
+      - name: Load azd template
+        run: |
+          azd env new ci-validation --no-prompt
+          azd env set GSA_ORGANIZATION_NAME "CI Validation" -e ci-validation
+          azd env get-values -e ci-validation > /dev/null
+
+      - name: Build Bicep
+        run: az bicep build --file ./infra/main.bicep --stdout > /dev/null
+
+      - name: Analyze PowerShell
+        shell: pwsh
+        run: |
+          $findings = @(Invoke-ScriptAnalyzer -Path ./scripts -Recurse -Severity Error,Warning)
+          if ($findings.Count -gt 0) {
+            $findings | Format-Table -AutoSize
+            throw "PSScriptAnalyzer reported $($findings.Count) finding(s)."
+          }
+
+      - name: Run Pester
+        shell: pwsh
+        run: |
+          $result = Invoke-Pester ./tests -PassThru -Output Detailed
+          if ($result.FailedCount -gt 0) {
+            throw "$($result.FailedCount) Pester test(s) failed."
+          }

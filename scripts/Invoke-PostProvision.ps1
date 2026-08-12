@@ -44,6 +44,9 @@ if ($graphNeeded) {
     if ($enableTls) {
         $scopes.Add('DeviceManagementConfiguration.ReadWrite.All')
     }
+    if ($enableBaseline) {
+        $scopes.Add('Policy.ReadWrite.ConditionalAccess')
+    }
     $graphContext = Connect-GsaGraph -Scopes @($scopes | Select-Object -Unique)
 
     $azureTenantId = Get-GsaEnvironmentValue -Name 'AZURE_TENANT_ID'
@@ -106,11 +109,14 @@ if ($enablePrivateAccess) {
 }
 
 if ($enableBaseline) {
-    $categories = Get-GsaList -Value (Get-GsaEnvironmentValue -Name 'GSA_BASELINE_BLOCKED_CATEGORIES' -Required)
+    $categories = Get-GsaList -Value (Get-GsaEnvironmentValue -Name 'GSA_BASELINE_BLOCKED_CATEGORIES' -Default 'SocialNetworking')
     $results.InternetBaseline = Set-GsaInternetBaseline `
-        -Name (Get-GsaEnvironmentValue -Name 'GSA_BASELINE_POLICY_NAME' -Default 'GSA Lab Baseline Web Filtering') `
+        -Name (Get-GsaEnvironmentValue -Name 'GSA_BASELINE_POLICY_NAME' -Default 'GSA POC Baseline Web Filtering') `
         -BlockedCategories $categories `
-        -AcknowledgeTenantWideImpact:(Get-GsaBoolean $env:GSA_ACKNOWLEDGE_LAB_MODE) `
+        -SecurityProfileName (Get-GsaEnvironmentValue -Name 'GSA_BASELINE_SECURITY_PROFILE_NAME' -Default 'GSA POC Baseline Security Profile') `
+        -ConditionalAccessPolicyName (Get-GsaEnvironmentValue -Name 'GSA_BASELINE_CA_POLICY_NAME' -Default 'GSA POC Baseline Internet Access') `
+        -SecurityProfilePriority ([int](Get-GsaEnvironmentValue -Name 'GSA_BASELINE_SECURITY_PROFILE_PRIORITY' -Default '100')) `
+        -PolicyLinkPriority ([int](Get-GsaEnvironmentValue -Name 'GSA_BASELINE_POLICY_LINK_PRIORITY' -Default '100')) `
         -WhatIf:$WhatIfPreference
 }
 

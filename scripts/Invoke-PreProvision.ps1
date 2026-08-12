@@ -105,7 +105,6 @@ if ($assignmentMode -eq 'PilotGroup') {
 }
 if (
     $assignmentMode -eq 'AllDevices' -or
-    (Get-GsaBoolean $env:GSA_ENABLE_INTERNET_BASELINE) -or
     (Get-GsaBoolean $env:GSA_ALLOW_UNDOCUMENTED_TENANT_ONBOARDING)
 ) {
     if (-not (Get-GsaBoolean $env:GSA_ACKNOWLEDGE_LAB_MODE)) {

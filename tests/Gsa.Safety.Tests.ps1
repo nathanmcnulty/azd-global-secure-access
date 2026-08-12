@@ -6,6 +6,8 @@ BeforeAll {
         Get-Content $_.FullName -Raw
     }) -join "`n"
     $postProvisionText = Get-Content (Join-Path $repoRoot 'scripts\Invoke-PostProvision.ps1') -Raw
+    $preProvisionText = Get-Content (Join-Path $repoRoot 'scripts\Invoke-PreProvision.ps1') -Raw
+    $readinessText = Get-Content (Join-Path $repoRoot 'scripts\Test-GsaReadiness.ps1') -Raw
     $certificateText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Certificate.psm1') -Raw
     $intuneText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Intune.psm1') -Raw
 }
@@ -98,10 +100,27 @@ Describe 'Tenant scope safety contract' {
         $postProvisionText | Should -Not -Match 'DesiredState\s*=\s*@\{\s*m365\s*=\s*\$false'
     }
 
-    It 'gates beta functionality and tenant-wide baselines' {
+    It 'gates beta functionality and keeps Internet baselines unassigned and disabled' {
         $scriptText | Should -Match 'GSA_ACCEPT_GRAPH_BETA_TERMS'
-        $scriptText | Should -Match 'AcknowledgeTenantWideImpact'
-        $scriptText | Should -Match 'GSA_ACKNOWLEDGE_LAB_MODE'
+        $scriptText | Should -Match "state\s*=\s*'disabled'"
+        $scriptText | Should -Match 'includeUsers\s*=\s*@\(\)'
+        $scriptText | Should -Match 'includeGroups\s*=\s*@\(\)'
+        $scriptText | Should -Match 'globalSecureAccessFilteringProfile'
+        $postProvisionText | Should -Match 'Policy\.ReadWrite\.ConditionalAccess'
+        $scriptText | Should -Not -Match 'priority\s*-eq\s*65000'
+        $preProvisionText | Should -Not -Match "Get-GsaBoolean \`\$env:GSA_ENABLE_INTERNET_BASELINE\)\s*-or"
+    }
+
+    It 'requires an active connector before configuring Private Access' {
+        $scriptText | Should -Match 'connectorGroups/\$ConnectorGroupId/members'
+        $scriptText | Should -Match 'has no active connectors'
+    }
+
+    It 'keeps readiness validation free of tenant mutations' {
+        $readinessText | Should -Match 'NetworkAccess\.Read\.All'
+        $readinessText | Should -Match 'Directory\.ReadWrite\.All'
+        $readinessText | Should -Match 'Test-GsaInternetBaseline'
+        $readinessText | Should -Not -Match 'Invoke-MgGraphRequest\s+-Method\s+(POST|PATCH|PUT|DELETE)'
     }
 
     It 'never assigns Intune profiles broadly by default' {
