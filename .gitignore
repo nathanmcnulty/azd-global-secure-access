@@ -1,0 +1,5 @@
+.azure/
+.vscode/
+*.tmp
+*.log
+TestResults/

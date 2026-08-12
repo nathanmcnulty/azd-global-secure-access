@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "organizationName": {
+      "value": "${GSA_ORGANIZATION_NAME}"
+    },
+    "resourceGroupName": {
+      "value": "${AZURE_RESOURCE_GROUP}"
+    },
+    "principalId": {
+      "value": "${AZURE_PRINCIPAL_ID}"
+    },
+    "principalType": {
+      "value": "${AZURE_PRINCIPAL_TYPE=User}"
+    },
+    "enableDiagnostics": {
+      "value": "${GSA_ENABLE_DIAGNOSTICS=false}"
+    },
+    "logAnalyticsWorkspaceResourceId": {
+      "value": "${GSA_LOG_ANALYTICS_WORKSPACE_ID=}"
+    },
+    "enableDefenderForKeyVault": {
+      "value": "${GSA_ENABLE_DEFENDER_FOR_KEY_VAULT=false}"
+    },
+    "enablePrivateEndpoint": {
+      "value": "${GSA_ENABLE_PRIVATE_ENDPOINT=false}"
+    },
+    "privateEndpointSubnetResourceId": {
+      "value": "${GSA_PRIVATE_ENDPOINT_SUBNET_ID=}"
+    },
+    "privateDnsZoneResourceId": {
+      "value": "${GSA_PRIVATE_DNS_ZONE_ID=}"
+    },
+    "privateEndpointLocation": {
+      "value": "${GSA_PRIVATE_ENDPOINT_LOCATION=}"
+    }
+  }
+}
