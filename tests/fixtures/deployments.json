@@ -1,0 +1,40 @@
+{
+  "value": [
+    {
+      "requestId": "deployment-success",
+      "lastModifiedDateTime": "2026-08-10T00:00:00Z",
+      "status": {
+        "deploymentStage": "succeeded",
+        "message": null
+      },
+      "configuration": {
+        "operationName": "Redistribute Forwarding Profile",
+        "changeType": "forwardingProfile"
+      }
+    },
+    {
+      "requestId": "deployment-failed",
+      "lastModifiedDateTime": "2026-08-11T00:00:00Z",
+      "status": {
+        "deploymentStage": "failed",
+        "message": "Sanitized deployment failure"
+      },
+      "configuration": {
+        "operationName": "Update Forwarding Profile",
+        "changeType": "forwardingProfile"
+      }
+    },
+    {
+      "requestId": "deployment-future",
+      "lastModifiedDateTime": "2026-08-11T01:00:00Z",
+      "status": {
+        "deploymentStage": "rollingBackFutureValue",
+        "message": "Sanitized future state"
+      },
+      "configuration": {
+        "operationName": "Future operation",
+        "changeType": "futureConfiguration"
+      }
+    }
+  ]
+}

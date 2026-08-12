@@ -161,6 +161,7 @@ function Get-OrCreateGsaRootCertificate {
     )
 
     $certificate = $null
+    $created = $false
     try {
         $certificate = Get-GsaKeyVaultCertificate -VaultName $VaultName -CertificateName $CertificateName
     } catch {
@@ -194,6 +195,7 @@ function Get-OrCreateGsaRootCertificate {
             }
         }
         Invoke-GsaKeyVault -Method POST -Uri "https://$VaultName.vault.azure.net/certificates/$CertificateName/create?api-version=7.5" -Body $policy | Out-Null
+        $created = $true
         for ($attempt = 1; $attempt -le 30; $attempt++) {
             Start-Sleep -Seconds 4
             try {
@@ -207,6 +209,7 @@ function Get-OrCreateGsaRootCertificate {
         }
     }
     Assert-GsaRootCertificate -CertificateInfo $certificate
+    $certificate | Add-Member -NotePropertyName Created -NotePropertyValue $created -Force
     return $certificate
 }
 
@@ -558,7 +561,8 @@ function Publish-GsaCrl {
                 throw
             }
         }
-        $clock = [System.Numerics.BigInteger]::new([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())
+        $publishedAt = [DateTimeOffset]::UtcNow
+        $clock = [System.Numerics.BigInteger]::new($publishedAt.ToUnixTimeMilliseconds())
         $number = if ($clock -gt $previous) { $clock } else { $previous + 1 }
         Invoke-GsaCrlPublicationLeaseRenewal -Lease $lease
         $crl = ConvertTo-GsaCrl -Issuer $Issuer -Number $number
@@ -566,7 +570,7 @@ function Publish-GsaCrl {
         if ($PSCmdlet.ShouldProcess($StorageAccountName, "Publish CRL number $number")) {
             $stateBytes = [Text.Encoding]::UTF8.GetBytes((@{
                 crlNumber  = $number.ToString()
-                published  = [DateTimeOffset]::UtcNow.ToString('O')
+                published  = $publishedAt.ToString('O')
                 thumbprint = $Issuer.Thumbprint
             } | ConvertTo-Json -Compress))
             Invoke-GsaStorageBlobUpload -StorageAccountName $StorageAccountName -Name $stateName -Content $stateBytes -ContentType 'application/json'
@@ -610,6 +614,8 @@ function Publish-GsaCrl {
             Number = $number.ToString()
             Bytes  = $crl.Length
             Sha256 = $expectedHash
+            PublishedAt = $publishedAt.ToString('O')
+            NextUpdate  = $publishedAt.AddDays(30).ToString('O')
         }
     } finally {
         Exit-GsaCrlPublicationLease -Lease $lease
@@ -640,6 +646,7 @@ function Set-GsaTlsCertificate {
             Name       = $active[0].name
             Status     = $active[0].status
             Changed    = $false
+            Created    = $false
             ManualStep = $null
         }
     }
@@ -653,6 +660,7 @@ function Set-GsaTlsCertificate {
 
     $certificateObject = $null
     $csr = $null
+    $created = $false
     if ($pending.Count -eq 1) {
         $certificateObject = Invoke-MgGraphRequest -Method GET -Uri "/beta/networkAccess/tls/externalCertificateAuthorityCertificates/$($pending[0].id)?`$select=id,name,status,certificateSigningRequest,certificate,chain" -Headers $headers -OutputType PSObject
         if ($certificateObject.status -eq 'unknownFutureValue' -and -not $certificateObject.certificateSigningRequest -and -not $certificateObject.certificate) {
@@ -676,6 +684,7 @@ function Set-GsaTlsCertificate {
             return
         }
         $certificateObject = Invoke-MgGraphRequest -Method POST -Uri '/beta/networkAccess/tls/externalCertificateAuthorityCertificates' -Body $body -ContentType 'application/json' -OutputType PSObject
+        $created = $true
         $csr = $certificateObject.certificateSigningRequest
     }
 
@@ -705,6 +714,7 @@ function Set-GsaTlsCertificate {
         Name       = $state.name
         Status     = $state.status
         Changed    = $true
+        Created    = $created
         ManualStep = $manualStep
     }
 }

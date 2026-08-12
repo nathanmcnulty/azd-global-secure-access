@@ -45,7 +45,8 @@ The design separates:
 - Sign and upload the GSA subordinate CA certificate and chain
 - Create/update Intune trusted-root profiles without replacing their existing assignments
 - Optionally create a reviewed Internet Access web-category policy, custom security profile, and disabled Conditional Access policy
-- Run read-only readiness validation that inventories onboarding, forwarding profiles, connector health, and managed Internet policy objects
+- Commit a versioned, non-secret ownership manifest beside the selected azd environment after successful configuration
+- Run read-only readiness and drift validation across cloud support, authorization, licensing indicators, onboarding, forwarding rules, connectors, deployment logs, Adaptive Access settings, certificates, CRLs, and managed objects
 
 ## Safety defaults
 
@@ -53,6 +54,9 @@ The design separates:
 - No forwarding profile is changed unless its state is explicitly set to `Enabled` or `Disabled`.
 - No connector or connector group is created. At least one active connector must already exist.
 - Existing tenant objects are reused by deterministic name and type.
+- Display names and natural identifiers are never sufficient to claim ownership. Reused objects remain `reused` and unowned unless a prior committed manifest contains the same object ID.
+- A pending transaction is written before configuration starts. The committed manifest is replaced atomically only after every enabled operation succeeds; partial failure leaves the pending record and never creates success-shaped ownership claims.
+- Manifest validation rejects access tokens, client secrets, certificate private keys, PSKs, and other private material.
 - Existing active GSA certificates are never deleted or replaced in place.
 - Rotation creates or resumes a replacement and preserves the active certificate.
 - Unknown and transitional Graph certificate status values are retained and surfaced.
@@ -97,12 +101,15 @@ Typical delegated roles:
 | Surface | Delegated permission |
 |---|---|
 | Tenant state, forwarding profiles, TLS, filtering | `NetworkAccess.ReadWrite.All` |
+| Tenant onboarding state read | `NetworkAccessPolicy.Read.All` |
 | Internet filtering Conditional Access policy | `Policy.ReadWrite.ConditionalAccess` |
 | Quick Access/Private Access application | `Directory.ReadWrite.All` |
 | Pilot app-role assignment | `AppRoleAssignment.ReadWrite.All` |
 | Intune trusted roots | `DeviceManagementConfiguration.ReadWrite.All` |
 
 The tenant onboarding action currently documents no supported OAuth permission. The portal is the default onboarding path.
+
+Readiness uses `NetworkAccess.Read.All`, `NetworkAccessPolicy.Read.All`, and `User.Read`. It requests `Policy.Read.All` only when the Internet baseline is enabled. Connector-group reads still require the documented `Directory.ReadWrite.All` surface. Subscribed SKU inventory is attempted only when the current context already has `LicenseAssignment.Read.All`, `Organization.Read.All`, `Directory.Read.All`, or `Directory.ReadWrite.All`; the advisory check never broadens consent or treats tenant SKU presence as proof of user assignment.
 
 ### Connector prerequisite
 
@@ -142,6 +149,8 @@ The pre-provision hook supplies safe defaults for:
 |---|---|---|
 | `AZURE_LOCATION` | `eastus` | Azure deployment region |
 | `AZURE_RESOURCE_GROUP` | `rg-<env>-gsa` | Resource group name |
+| `AZURE_CLOUD_NAME` | active Azure CLI cloud | Persisted by pre-provision after endpoint validation |
+| `GSA_GRAPH_ENVIRONMENT` | `Global` for `AzureCloud`; `China` for `AzureChinaCloud` | Microsoft Graph PowerShell environment; US Government requires explicit `USGov` or `USGovDoD` because the Azure cloud alone cannot distinguish L4 from L5 |
 | `GSA_ORGANIZATION_NAME` | azd environment name | Certificate organization and naming input |
 | `AZURE_PRINCIPAL_ID` | current token `oid` | Principal receiving data-plane roles |
 | `AZURE_PRINCIPAL_TYPE` | inferred | `User`, `ServicePrincipal`, or `Group` |
@@ -276,6 +285,32 @@ Managed objects are resolved by deterministic name. Compatible objects are reuse
 
 Custom Acquire/Bypass and Agentic Acquire rules remain portal/manual because Microsoft does not currently publish a complete validated REST workflow. Threat-intelligence defaults are also manual because Graph and portal examples disagree on `defaultAction`.
 
+## Environment state and ownership
+
+The post-provision hook stores lifecycle state at:
+
+```text
+.azure/<AZURE_ENV_NAME>/gsa-state.json
+```
+
+The file is local to the azd environment and excluded from source control. Schema `1.0.0` records:
+
+- tenant, subscription, environment, resource-group, Azure cloud, and Graph environment identity;
+- template, azd, Graph, Key Vault, and Storage contract versions;
+- a canonical SHA-256 fingerprint for the complete desired configuration;
+- stable natural identifiers and immutable object IDs;
+- `managed` versus `reused` ownership and `created` versus `reused` provenance;
+- an `active` lifecycle marker reserved for later cleanup/recovery layers to transition explicitly rather than deleting ownership evidence;
+- per-object desired and observed fingerprints;
+- exact prior mutable state, such as a reused forwarding profile's original state, when later restoration can be designed safely;
+- read-only Graph URIs used by drift reporting.
+
+Before configuration, the hook atomically writes `gsa-state.pending.json` with `status=pending`, the operation ID, environment identity, and desired fingerprint. On complete success it atomically replaces `gsa-state.json`, then removes the pending file. If a process fails after a tenant mutation, the previous committed manifest remains the last known success and the pending file explicitly signals that ownership and actual state require reconciliation.
+
+Later successful runs merge untouched resource records and cumulative desired configuration from the prior manifest. Turning a feature execution flag back to `false` means "do not mutate this feature on this run"; it does not discard ownership, prior mutable state, or the strong readiness checks for objects already recorded in the manifest.
+
+Neither state file contains secrets, private certificate material, access tokens, or PSKs. A newly discovered object with the same display name but a different object ID remains `reused`; this layer has no adoption workflow.
+
 ## Deploy
 
 Review values:
@@ -318,7 +353,42 @@ azd env get-values | ForEach-Object {
 pwsh ./scripts/Test-GsaReadiness.ps1 -OutputPath ./TestResults/gsa-readiness.json
 ```
 
-The command performs only Graph GET operations, confirms the Graph and Azure tenant IDs match, inventories the three forwarding profiles, and verifies the configured connector group has an active connector. When the Internet baseline is enabled, it validates the blocked categories, custom profile state and priority, exclusive policy link and logging state, and the disabled, unassigned Conditional Access policy including its target application and filtering-profile session control. It requests `NetworkAccess.Read.All` and, when applicable, `Policy.Read.All`. Connector-group reads currently require the delegated `Directory.ReadWrite.All` scope even though this command does not mutate directory objects. It exits nonzero for failed readiness checks so it can be used as a promotion gate.
+The command emits human-readable status lines and returns structured JSON. Use `-JsonOnly` when the success stream must contain only JSON. Every check has a `status`, `classification`, expected value, actual value, detail, resource key, and ownership where known.
+
+Classifications are `managed`, `reused`, `missing`, `changed`, `unmanagedConflict`, `unsupported`, and `unknownTransitional`. The report:
+
+- validates the Azure/Graph cloud and endpoint contract and tenant consistency;
+- confirms required Graph scopes and reports observable supported directory roles;
+- reports subscribed SKU/service-plan indicators as advisory only;
+- inventories onboarding, forwarding profile IDs/states, and the complete Microsoft traffic rule action/type payload;
+- flags explicit Microsoft traffic `bypass` rules and unknown rules without changing either;
+- validates active connectors and preserves unknown connector states;
+- reports failed, pending, and unknown deployment stages with error messages;
+- inventories Adaptive Access/Conditional Access signaling without changing it;
+- checks Graph TLS certificate status and 90-day expiry;
+- retrieves the committed CRL, verifies its exact SHA-256 fingerprint, and reports seven-day/expired thresholds;
+- compares committed object IDs and desired fingerprints through GET-only Graph calls;
+- verifies the managed Internet policy chain whenever it is enabled for execution or recorded in committed state.
+
+It exits nonzero only for clear failed readiness conditions, unsupported requested surfaces, missing required authorization, tenant conflict, or changed/unmanaged committed resources. A missing object retained only as historical ownership evidence is a warning until the later cleanup layer can mark it retired. Missing optional license-read consent and inconclusive role/license evidence are also warnings.
+
+### Commercial and sovereign capability matrix
+
+Support is evaluated per API surface rather than inferred from one endpoint:
+
+| Surface | Global | US Gov L4/L5 | China |
+|---|---:|---:|---:|
+| Tenant status | Supported | Supported | Unsupported |
+| Forwarding profiles, policies, policy rules | Supported | Supported | Unsupported |
+| Forwarding-profile update | Supported | Supported | Unsupported |
+| Subscribed SKU inventory | Supported | Supported | Supported |
+| Adaptive Access / Conditional Access signaling | Supported | Unsupported | Unsupported |
+| Filtering profiles/policies | Supported | Unsupported | Unsupported |
+| External TLS CA certificates | Supported | Unsupported | Unsupported |
+| Deployment logs | Supported | Not asserted by current API reference | Not asserted by current API reference |
+| Quick Access, Private Access, Intune, TLS, and filtering mutation workflow as a whole | Supported | Not validated by this template | Unsupported |
+
+For US Government readiness or forwarding-only operations, set `GSA_GRAPH_ENVIRONMENT` explicitly to `USGov` or `USGovDoD`. Requests for an unsupported surface fail before mutation with the exact Azure cloud, Graph environment, and capability evidence. The subscribed SKU API is independently available in China, but full GSA readiness fails closed because tenant status and forwarding APIs explicitly document no China support.
 
 ## Validate
 
@@ -427,7 +497,7 @@ Purge protection prevents immediate permanent deletion of the Key Vault. Plan fo
 
 Tenant cleanup is intentionally manual:
 
-- restore forwarding profiles only when you have recorded their previous state;
+- use the committed manifest as evidence of object IDs, ownership, desired fingerprints, and recorded prior forwarding state, but keep restoration manual until a later cleanup layer adds explicit recovery policy;
 - remove pilot app-role assignments;
 - remove Quick Access/Private Access applications after confirming no dependent segments;
 - unlink and remove the lab filtering policy;
@@ -466,7 +536,8 @@ At minimum:
 | Custom/Agentic Acquire | Portal workflow | Manual |
 | Threat intelligence baseline | Conflicting documented defaults | Manual |
 | Conditional Access assignment | Graph beta session control; potential 60-90 minute propagation | Policy created disabled with no principals; pilot targeting and enablement require review |
-| Readiness inventory | Graph beta plus CA reads; connector-group GET APIs currently require `Directory.ReadWrite.All` | Non-mutating report; optional CI or change-promotion gate |
+| Ownership state | Local azd environment schema `1.0.0` | Pending transaction plus atomic committed manifest; ID-based ownership only |
+| Readiness and drift inventory | Graph beta/v1.0 plus CRL HTTP read; connector-group GET APIs currently require `Directory.ReadWrite.All` | Non-mutating text and JSON report; optional CI or change-promotion gate |
 | Traffic, deployment, and remote-network health logs | Graph beta and Microsoft Entra diagnostic settings | Documented monitoring target; no subscription-level diagnostic mutation by default |
 
 Quick Access supports at most 500 segments, and nested group assignment is not supported. Security-profile and Conditional Access propagation can take 60-90 minutes.
@@ -495,6 +566,14 @@ Before production use:
 
 - [Azure Developer CLI hooks](https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-extensibility)
 - [azd environment variables](https://learn.microsoft.com/azure/developer/azure-developer-cli/manage-environment-variables)
+- [azd schema and `requiredVersions`](https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-schema)
+- [Microsoft Graph national cloud deployments](https://learn.microsoft.com/graph/deployments)
+- [List GSA forwarding profiles](https://learn.microsoft.com/graph/api/networkaccess-networkaccessroot-list-forwardingprofiles?view=graph-rest-beta)
+- [List forwarding policy rules](https://learn.microsoft.com/graph/api/networkaccess-policy-list-policyrules?view=graph-rest-beta)
+- [Get GSA tenant status](https://learn.microsoft.com/graph/api/networkaccess-tenantstatus-get?view=graph-rest-beta)
+- [Get GSA Conditional Access settings](https://learn.microsoft.com/graph/api/networkaccess-conditionalaccesssettings-get?view=graph-rest-beta)
+- [List GSA deployments](https://learn.microsoft.com/graph/api/networkaccess-deployments-list?view=graph-rest-beta)
+- [List subscribed SKUs](https://learn.microsoft.com/graph/api/subscribedsku-list?view=graph-rest-1.0)
 - [Prevent Shared Key authorization for Azure Storage](https://learn.microsoft.com/azure/storage/common/shared-key-authorization-prevent)
 - [Azure Key Vault RBAC](https://learn.microsoft.com/azure/key-vault/general/rbac-guide)
 - [Azure Key Vault private link](https://learn.microsoft.com/azure/key-vault/general/private-link-service)

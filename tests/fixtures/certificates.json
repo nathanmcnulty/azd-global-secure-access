@@ -1,0 +1,35 @@
+{
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.networkaccess.externalCertificateAuthorityCertificate",
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "name": "Active CA",
+      "status": "active",
+      "validity": {
+        "startDateTime": "2026-01-01T00:00:00Z",
+        "endDateTime": "2028-01-01T00:00:00Z"
+      }
+    },
+    {
+      "@odata.type": "#microsoft.graph.networkaccess.externalCertificateAuthorityCertificate",
+      "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "name": "Expiring CA",
+      "status": "expiring",
+      "validity": {
+        "startDateTime": "2025-09-01T00:00:00Z",
+        "endDateTime": "2026-09-01T00:00:00Z"
+      }
+    },
+    {
+      "@odata.type": "#microsoft.graph.networkaccess.externalCertificateAuthorityCertificate",
+      "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "name": "Future CA",
+      "status": "rotatingFutureValue",
+      "validity": {
+        "startDateTime": "2026-01-01T00:00:00Z",
+        "endDateTime": "2028-01-01T00:00:00Z"
+      },
+      "futureStatusDetail": "sanitized-value"
+    }
+  ]
+}

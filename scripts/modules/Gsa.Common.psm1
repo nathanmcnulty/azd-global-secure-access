@@ -106,10 +106,15 @@ function Connect-GsaGraph {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string[]]$Scopes
+        [string[]]$Scopes,
+        [ValidateSet('Global', 'USGov', 'USGovDoD', 'China')]
+        [string]$Environment = 'Global'
     )
 
     $context = Get-MgContext -ErrorAction SilentlyContinue
+    if ($context -and $context.Environment -ne $Environment) {
+        throw "Microsoft Graph is connected to '$($context.Environment)' but '$Environment' is required for this environment."
+    }
     $missing = if ($context) {
         @($Scopes | Where-Object { $_ -notin $context.Scopes })
     } else {
@@ -117,15 +122,171 @@ function Connect-GsaGraph {
     }
 
     if (-not $context -or $missing.Count -gt 0) {
-        Connect-MgGraph -Scopes $Scopes -NoWelcome | Out-Null
+        Connect-MgGraph -Scopes $Scopes -Environment $Environment -NoWelcome | Out-Null
         $context = Get-MgContext
     }
 
+    if ($context.Environment -ne $Environment) {
+        throw "Microsoft Graph connected to '$($context.Environment)' instead of '$Environment'."
+    }
     $missing = @($Scopes | Where-Object { $_ -notin $context.Scopes })
     if ($missing.Count -gt 0) {
         throw "Microsoft Graph consent is missing: $($missing -join ', ')."
     }
     return $context
+}
+
+function Get-GsaGraphEndpoint {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('Global', 'USGov', 'USGovDoD', 'China')]
+        [string]$Environment
+    )
+
+    switch ($Environment) {
+        'Global' { return 'https://graph.microsoft.com' }
+        'USGov' { return 'https://graph.microsoft.us' }
+        'USGovDoD' { return 'https://dod-graph.microsoft.us' }
+        'China' { return 'https://microsoftgraph.chinacloudapi.cn' }
+    }
+}
+
+function Get-GsaCloudCapability {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$AzureCloud,
+        [string]$GraphEnvironment
+    )
+
+    $definition = switch ($AzureCloud) {
+        'AzureCloud' {
+            [ordered]@{
+                ExpectedGraphEnvironments = @('Global')
+                ArmEndpoint               = 'https://management.azure.com/'
+                GraphCoreRead             = $true
+                ForwardingRules           = $true
+                ForwardingMutation        = $true
+                TenantOnboarding          = $true
+                Licensing                 = $true
+                Settings                  = $true
+                DeploymentLogs            = $true
+                Tls                       = $true
+                Filtering                 = $true
+                GraphMutation             = $true
+                AzureDataPlane            = $true
+                Evidence                  = 'Global Microsoft Graph networkAccess APIs and the template Azure data-plane endpoints are supported.'
+            }
+        }
+        'AzureUSGovernment' {
+            [ordered]@{
+                ExpectedGraphEnvironments = @('USGov', 'USGovDoD')
+                ArmEndpoint               = 'https://management.usgovcloudapi.net/'
+                GraphCoreRead             = $true
+                ForwardingRules           = $true
+                ForwardingMutation        = $true
+                TenantOnboarding          = $true
+                Licensing                 = $true
+                Settings                  = $false
+                DeploymentLogs            = $false
+                Tls                       = $false
+                Filtering                 = $false
+                GraphMutation             = $false
+                AzureDataPlane            = $false
+                Evidence                  = 'Forwarding profiles, forwarding policies, and policy rules document US Government L4/L5 support. TLS certificate APIs document global-only support, and the remaining template mutation/data-plane surfaces are not validated for this cloud.'
+            }
+        }
+        'AzureChinaCloud' {
+            [ordered]@{
+                ExpectedGraphEnvironments = @('China')
+                ArmEndpoint               = 'https://management.chinacloudapi.cn/'
+                GraphCoreRead             = $false
+                ForwardingRules           = $false
+                ForwardingMutation        = $false
+                TenantOnboarding          = $false
+                Licensing                 = $true
+                Settings                  = $false
+                DeploymentLogs            = $false
+                Tls                       = $false
+                Filtering                 = $false
+                GraphMutation             = $false
+                AzureDataPlane            = $false
+                Evidence                  = 'Subscribed SKU reads support China, but the required networkAccess forwarding and TLS APIs explicitly do not.'
+            }
+        }
+        default {
+            [ordered]@{
+                ExpectedGraphEnvironments = @()
+                ArmEndpoint               = $null
+                GraphCoreRead             = $false
+                ForwardingRules           = $false
+                ForwardingMutation        = $false
+                TenantOnboarding          = $false
+                Licensing                 = $false
+                Settings                  = $false
+                DeploymentLogs            = $false
+                Tls                       = $false
+                Filtering                 = $false
+                GraphMutation             = $false
+                AzureDataPlane            = $false
+                Evidence                  = "Azure cloud '$AzureCloud' is not in the validated capability matrix."
+            }
+        }
+    }
+
+    $environmentMatch = -not $GraphEnvironment -or $GraphEnvironment -in $definition.ExpectedGraphEnvironments
+    return [pscustomobject]@{
+        AzureCloud                = $AzureCloud
+        GraphEnvironment          = $GraphEnvironment
+        ExpectedGraphEnvironments = [string[]]$definition.ExpectedGraphEnvironments
+        ArmEndpoint               = $definition.ArmEndpoint
+        GraphCoreRead             = $definition.GraphCoreRead -and $environmentMatch
+        ForwardingRules           = $definition.ForwardingRules -and $environmentMatch
+        ForwardingMutation        = $definition.ForwardingMutation -and $environmentMatch
+        TenantOnboarding          = $definition.TenantOnboarding -and $environmentMatch
+        Licensing                 = $definition.Licensing -and $environmentMatch
+        Settings                  = $definition.Settings -and $environmentMatch
+        DeploymentLogs            = $definition.DeploymentLogs -and $environmentMatch
+        Tls                       = $definition.Tls -and $environmentMatch
+        Filtering                 = $definition.Filtering -and $environmentMatch
+        GraphMutation             = $definition.GraphMutation -and $environmentMatch
+        AzureDataPlane            = $definition.AzureDataPlane
+        EnvironmentMatch          = $environmentMatch
+        Evidence                  = $definition.Evidence
+    }
+}
+
+function Assert-GsaCloudCapability {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Capability,
+        [Parameter(Mandatory)]
+        [ValidateSet(
+            'GraphCoreRead',
+            'ForwardingRules',
+            'ForwardingMutation',
+            'TenantOnboarding',
+            'Licensing',
+            'Settings',
+            'DeploymentLogs',
+            'Tls',
+            'Filtering',
+            'GraphMutation',
+            'AzureDataPlane'
+        )]
+        [string]$Surface
+    )
+
+    if (-not $Capability.$Surface) {
+        $expected = if ($Capability.ExpectedGraphEnvironments.Count -gt 0) {
+            " Expected Graph environment: $($Capability.ExpectedGraphEnvironments -join ' or ')."
+        } else {
+            ''
+        }
+        throw "Surface '$Surface' is unsupported for Azure cloud '$($Capability.AzureCloud)' and Graph environment '$($Capability.GraphEnvironment)'.$expected $($Capability.Evidence)"
+    }
 }
 
 function Get-GsaGraphCollection {
@@ -294,9 +455,12 @@ function Get-GsaSegmentKey {
 
 Export-ModuleMember -Function @(
     'Assert-GsaPreviewGate',
+    'Assert-GsaCloudCapability',
     'Connect-GsaGraph',
     'Get-GsaBoolean',
+    'Get-GsaCloudCapability',
     'Get-GsaEnvironmentValue',
+    'Get-GsaGraphEndpoint',
     'Get-GsaGraphCollection',
     'Get-GsaList',
     'Get-GsaNetworkAddress',

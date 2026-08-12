@@ -1,6 +1,9 @@
 name: azd-global-secure-access
 metadata:
-  template: azd-global-secure-access@0.1.0
+  template: azd-global-secure-access@0.2.0
+
+requiredVersions:
+  azd: ">= 1.30.0"
 
 infra:
   provider: bicep

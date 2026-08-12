@@ -1,0 +1,42 @@
+{
+  "value": [
+    {
+      "id": "11111111-aaaa-bbbb-cccc-111111111111",
+      "name": "Microsoft 365 Common",
+      "trafficForwardingType": "m365",
+      "policyRules": [
+        {
+          "@odata.type": "#microsoft.graph.networkaccess.m365ForwardingRule",
+          "id": "rule-forward",
+          "name": "Default forward",
+          "ruleType": "fqdn",
+          "action": "forward",
+          "destinations": []
+        },
+        {
+          "@odata.type": "#microsoft.graph.networkaccess.m365ForwardingRule",
+          "id": "rule-bypass",
+          "name": "Administrator bypass",
+          "ruleType": "fqdn",
+          "action": "bypass",
+          "destinations": [
+            {
+              "@odata.type": "#microsoft.graph.networkaccess.fqdn",
+              "value": "example.invalid"
+            }
+          ]
+        },
+        {
+          "@odata.type": "#microsoft.graph.networkaccess.futureForwardingRule",
+          "id": "rule-future",
+          "name": "Future rule",
+          "ruleType": "futureDestination",
+          "action": "inspectFutureValue",
+          "futureField": {
+            "preserve": true
+          }
+        }
+      ]
+    }
+  ]
+}

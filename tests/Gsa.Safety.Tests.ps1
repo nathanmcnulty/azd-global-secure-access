@@ -8,8 +8,11 @@ BeforeAll {
     $postProvisionText = Get-Content (Join-Path $repoRoot 'scripts\Invoke-PostProvision.ps1') -Raw
     $preProvisionText = Get-Content (Join-Path $repoRoot 'scripts\Invoke-PreProvision.ps1') -Raw
     $readinessText = Get-Content (Join-Path $repoRoot 'scripts\Test-GsaReadiness.ps1') -Raw
+    $stateText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.State.psm1') -Raw
+    $commonText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Common.psm1') -Raw
     $certificateText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Certificate.psm1') -Raw
     $intuneText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Intune.psm1') -Raw
+    $azureYamlText = Get-Content (Join-Path $repoRoot 'azure.yaml') -Raw
 }
 
 Describe 'PowerShell syntax' {
@@ -118,6 +121,7 @@ Describe 'Tenant scope safety contract' {
 
     It 'keeps readiness validation free of tenant mutations' {
         $readinessText | Should -Match 'NetworkAccess\.Read\.All'
+        $readinessText | Should -Match 'NetworkAccessPolicy\.Read\.All'
         $readinessText | Should -Match 'Directory\.ReadWrite\.All'
         $readinessText | Should -Match 'Test-GsaInternetBaseline'
         $readinessText | Should -Not -Match 'Invoke-MgGraphRequest\s+-Method\s+(POST|PATCH|PUT|DELETE)'
@@ -133,5 +137,41 @@ Describe 'Tenant scope safety contract' {
         $intuneText | Should -Not -Match '#microsoft\.graph\.androidTrustedRootCertificate'
         $intuneText | Should -Match 'AndroidAOSP'
         $intuneText | Should -Match 'No validated typed Graph resource is documented'
+    }
+}
+
+Describe 'Lifecycle state contract' {
+    It 'pins the azd contract used by the state schema' {
+        $azureYamlText | Should -Match 'requiredVersions:'
+        $azureYamlText | Should -Match 'azd:\s*">= 1\.30\.0"'
+        $azureYamlText | Should -Match 'azd-global-secure-access@0\.2\.0'
+    }
+
+    It 'writes pending state before mutations and commits only after enabled operations' {
+        $postProvisionText.IndexOf('Write-GsaPendingTransaction') | Should -BeLessThan $postProvisionText.IndexOf('Enable-GsaTenantOnboarding')
+        $postProvisionText.IndexOf('Complete-GsaStateTransaction') | Should -BeGreaterThan $postProvisionText.IndexOf('Set-GsaIntuneTrustedRoot')
+        $stateText | Should -Match '\[IO\.File\]::Move\(\$temporaryPath,\s*\$resolved,\s*\$true\)'
+    }
+
+    It 'rejects secret-shaped fields and keeps ownership tied to exact IDs' {
+        $stateText | Should -Match 'access\.\?token'
+        $stateText | Should -Match 'PRIVATE KEY'
+        $stateText | Should -Match '\$previous\.ownership -eq ''managed'''
+        $stateText | Should -Match '\$previousManifest\.resources.*\$_.id -eq \$Id'
+    }
+
+    It 'preserves untouched resources and strong checks across execution-toggle changes' {
+        $postProvisionText | Should -Match 'Merge-GsaStateResourceSet'
+        $postProvisionText | Should -Match 'previousDesiredState\.internetBaseline\.enabled'
+        $readinessText | Should -Match 'manifestHasInternetBaseline'
+        $readinessText | Should -Match 'GSA_ENABLE_INTERNET_BASELINE\).*-or \$manifestHasInternetBaseline'
+    }
+
+    It 'uses a per-surface cloud matrix instead of broad national-cloud claims' {
+        $commonText | Should -Match 'ForwardingRules'
+        $commonText | Should -Match 'ForwardingMutation'
+        $commonText | Should -Match 'DeploymentLogs'
+        $commonText | Should -Match 'AzureUSGovernment'
+        $commonText | Should -Match 'AzureChinaCloud'
     }
 }
