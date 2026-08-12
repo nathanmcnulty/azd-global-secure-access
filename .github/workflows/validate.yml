@@ -22,7 +22,7 @@ jobs:
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force
+          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force
           Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
 
       - name: Build Bicep
