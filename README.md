@@ -2,6 +2,8 @@
 
 This repository provisions the Azure foundation for a Microsoft Entra Global Secure Access (GSA) proof of concept and optionally configures selected Microsoft Graph surfaces through explicit, idempotent post-provision hooks.
 
+The complete design, trust boundaries, ownership transaction, cleanup/recovery, observability, remote-network, and validation flows are available as reviewable [Mermaid architecture and lifecycle sources](docs/architecture.md). This is a proof-of-concept template, not a production offboarding or tenant-management product.
+
 The design separates:
 
 - **Bicep**: Azure resource group, Premium Key Vault, CRL storage, Azure RBAC, and optional diagnostics, Defender for Key Vault, and Key Vault private endpoint.
@@ -129,6 +131,8 @@ Use the connector group object ID for `GSA_CONNECTOR_GROUP_ID`.
 The provisioning workflow now verifies that the selected group contains at least one connector whose Graph status is `active`. It stops before creating or changing Private Access configuration when the group has no active connector.
 
 ## Configuration
+
+A secret-free, reference-only configuration is available at [`samples/azd-safe-poc.env`](samples/azd-safe-poc.env). Copy only reviewed values with `azd env set`; do not commit a real `.azure/<environment>/.env`, and do not store credentials or runtime network shared secrets in azd environment files.
 
 Create an environment and set the organization name:
 
@@ -480,6 +484,8 @@ Invoke-Pester .\tests -Output Detailed
 
 The repository also loads `azure.yaml` as an `azd` project and runs the Bicep, PSScriptAnalyzer, and Pester checks in GitHub Actions for every pull request and push to `main`. CI pins the tested `azd`, Pester, PSScriptAnalyzer, and `setup-azd` versions for reproducible validation.
 
+Repository validation is deliberately non-deploying. Passing tests proves parser, contract, schema-variation, packaging, and deterministic planning behavior against sanitized inputs; it does not prove a tenant is licensed, a preview category is exposed, a client acquired traffic, or a live deployment will satisfy organization-specific controls.
+
 After deployment, validate:
 
 1. Key Vault is Premium, RBAC-enabled, purge-protected, and reachable from the signing host.
@@ -624,6 +630,15 @@ At minimum:
 
 Quick Access supports at most 500 segments, and nested group assignment is not supported. Security-profile and Conditional Access propagation can take 60-90 minutes.
 
+## Packaging, releases, and publication readiness
+
+- [`CHANGELOG.md`](CHANGELOG.md) records operator-visible and safety-relevant changes for template version `0.3.0`.
+- [`docs/release.md`](docs/release.md) defines deterministic, manual Semantic Versioning and release checks. No automatic credential-bearing release pipeline is included.
+- [`docs/awesome-azd.md`](docs/awesome-azd.md) contains the current Awesome AZD prerequisite checklist and copy-ready submission fields. It does not submit externally.
+- Standard `azure.yaml` metadata remains limited to the officially defined `metadata.template` value and `requiredVersions.azd`; repository source, API maturity, and workflow details are documented rather than placed in invented schema fields.
+
+The development stack must merge in order: PR #2, PR #3, PR #4, PR #5, PR #6, then the final packaging/CI PR. Merging a later layer first can separate tests and documentation from the ownership and planning contracts they describe.
+
 ## Production hardening
 
 Before production use:
@@ -639,6 +654,8 @@ Before production use:
 - use separate roots for environment or administrative boundaries;
 - document certificate revocation and emergency bypass procedures;
 - validate every beta Graph payload in a test tenant after SDK/API changes;
+- establish organizational retention, data-residency, workspace RBAC, query, alert, archive, and ingestion-cost controls;
+- replace proof-of-concept delegated execution and local ownership storage with reviewed operational controls where supported;
 - replace lab category choices with approved security policy;
 - use pilot rings and staged Conditional Access;
 - maintain break-glass connectivity that does not depend on the inspected path;
@@ -671,6 +688,8 @@ Before production use:
 - [Create a remote-network device link](https://learn.microsoft.com/graph/api/networkaccess-remotenetwork-post-devicelinks?view=graph-rest-beta)
 - [Global Secure Access remote-network connectivity](https://learn.microsoft.com/entra/global-secure-access/how-to-configure-remote-networks)
 - [Remote-network connectivity and bandwidth](https://learn.microsoft.com/entra/global-secure-access/reference-remote-network-connectivity)
+- [Azure Developer CLI template conventions](https://learn.microsoft.com/azure/developer/azure-developer-cli/make-azd-compatible)
+- [Awesome AZD contribution guidance](https://azure.github.io/awesome-azd/docs/contribute/)
 
 ## License
 

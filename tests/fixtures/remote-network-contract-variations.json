@@ -1,0 +1,49 @@
+{
+  "validUnknownFields": {
+    "remoteNetworks": [
+      {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "name": "Sanitized Branch",
+        "region": "eastUS",
+        "status": "futureHealthState",
+        "forwardingProfiles": [
+          {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "trafficForwardingType": "futureTrafficType",
+            "futureAssociationField": "preserved"
+          }
+        ],
+        "deviceLinks": [],
+        "futureRemoteNetworkField": "preserved"
+      }
+    ],
+    "deployments": [],
+    "adaptiveAccess": {
+      "sourceIpRestorationStatus": "futureValue",
+      "compliantNetworkStatus": "futureValue",
+      "futureAdaptiveField": "preserved"
+    },
+    "namedLocations": [],
+    "conditionalAccessPolicies": []
+  },
+  "ambiguousIdentity": {
+    "remoteNetworks": [
+      {
+        "name": "Sanitized Branch",
+        "region": "eastUS",
+        "forwardingProfiles": [],
+        "deviceLinks": []
+      }
+    ],
+    "deployments": [],
+    "adaptiveAccess": {},
+    "namedLocations": [],
+    "conditionalAccessPolicies": []
+  },
+  "ambiguousCollections": {
+    "remoteNetworks": [],
+    "adaptiveAccess": {},
+    "namedLocations": [],
+    "conditionalAccessPolicies": []
+  }
+}

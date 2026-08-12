@@ -48,6 +48,26 @@ jobs:
             throw "PSScriptAnalyzer reported $($findings.Count) finding(s)."
           }
 
+      - name: Audit packaged samples and fixtures
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem ./samples, ./tests/fixtures -Recurse -File -ErrorAction Stop)
+          $patterns = @(
+            '-----BEGIN [A-Z ]*PRIVATE KEY-----',
+            '(?i)bearer\s+eyJ',
+            '(?i)client[_-]?secret\s*[:=]\s*["'']?[^"''\s]+',
+            '(?i)pre.?shared.?key',
+            '(?i)(^|[^a-z])psk([^a-z]|$)'
+          )
+          foreach ($file in $files) {
+            $content = Get-Content $file.FullName -Raw
+            foreach ($pattern in $patterns) {
+              if ($content -match $pattern) {
+                throw "Packaged sample or fixture contains prohibited secret-shaped content: $($file.FullName)"
+              }
+            }
+          }
+
       - name: Run Pester
         shell: pwsh
         run: |

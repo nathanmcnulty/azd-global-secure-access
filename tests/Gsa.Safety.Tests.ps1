@@ -193,7 +193,7 @@ Describe 'Lifecycle state contract' {
     It 'pins the azd contract used by the state schema' {
         $azureYamlText | Should -Match 'requiredVersions:'
         $azureYamlText | Should -Match 'azd:\s*">= 1\.30\.0"'
-        $azureYamlText | Should -Match 'azd-global-secure-access@0\.2\.0'
+        $azureYamlText | Should -Match 'azd-global-secure-access@0\.3\.0'
     }
 
     It 'writes pending state before mutations and commits only after enabled operations' {
