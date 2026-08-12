@@ -1,0 +1,24 @@
+{
+  "value": [
+    {
+      "id": "tenant_sku",
+      "skuId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      "skuPartNumber": "SANITIZED_ENTRA_SUITE",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 5,
+      "prepaidUnits": {
+        "enabled": 10,
+        "suspended": 0,
+        "warning": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+          "servicePlanName": "GLOBAL_SECURE_ACCESS",
+          "provisioningStatus": "Success",
+          "appliesTo": "User"
+        }
+      ]
+    }
+  ]
+}

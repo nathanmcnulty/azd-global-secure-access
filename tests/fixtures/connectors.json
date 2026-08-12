@@ -1,0 +1,28 @@
+{
+  "active": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "machineName": "connector-01",
+      "status": "active"
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "machineName": "connector-02",
+      "status": "inactive"
+    }
+  ],
+  "inactive": [
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "machineName": "connector-03",
+      "status": "inactive"
+    }
+  ],
+  "unknown": [
+    {
+      "id": "44444444-4444-4444-4444-444444444444",
+      "machineName": "connector-04",
+      "status": "drainingFutureValue"
+    }
+  ]
+}

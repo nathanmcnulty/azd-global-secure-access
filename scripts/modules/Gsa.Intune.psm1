@@ -97,10 +97,12 @@ function Set-GsaIntuneTrustedRoot {
 
         $intuneProfile = $profileMatches | Select-Object -First 1
         $changed = $false
+        $created = $false
         if (-not $intuneProfile) {
             if ($PSCmdlet.ShouldProcess($name, 'Create Intune trusted-root profile')) {
                 $intuneProfile = Invoke-MgGraphRequest -Method POST -Uri '/beta/deviceManagement/deviceConfigurations' -Body ($body | ConvertTo-Json -Depth 6) -ContentType 'application/json' -OutputType PSObject
                 $changed = $true
+                $created = $true
             }
         } elseif ($intuneProfile.trustedRootCertificate -ne $base64) {
             if ($PSCmdlet.ShouldProcess($name, 'Update Intune trusted-root certificate while preserving assignments')) {
@@ -146,7 +148,9 @@ function Set-GsaIntuneTrustedRoot {
         $results.Add([pscustomobject]@{
             Platform   = $platform
             Id         = if ($intuneProfile) { $intuneProfile.id } else { $null }
+            Name       = $name
             Status     = if ($changed) { 'Changed' } else { 'Current' }
+            Created    = $created
             ManualStep = $null
             AssignmentMode = $AssignmentMode
         })

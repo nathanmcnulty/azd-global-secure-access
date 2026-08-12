@@ -58,8 +58,9 @@ function Set-GsaForwardingProfile {
 
         $forwardingProfile = $profileMatches[0]
         $desired = if ([bool]$DesiredState[$trafficType]) { 'enabled' } else { 'disabled' }
+        $previousState = [string]$forwardingProfile.state
         $changed = $false
-        if ($forwardingProfile.state -ne $desired) {
+        if ($previousState -ne $desired) {
             if ($PSCmdlet.ShouldProcess($forwardingProfile.name, "Set forwarding profile state to '$desired'")) {
                 $body = @{ state = $desired } | ConvertTo-Json -Compress
                 Invoke-MgGraphRequest -Method PATCH -Uri "/beta/networkAccess/forwardingProfiles/$($forwardingProfile.id)" -Body $body -ContentType 'application/json' | Out-Null
@@ -71,6 +72,8 @@ function Set-GsaForwardingProfile {
             TrafficType = $trafficType
             State       = $desired
             Changed     = $changed
+            Created     = $false
+            PreviousState = $previousState
         })
     }
     return $results.ToArray()
@@ -173,8 +176,9 @@ function Set-GsaPrivateApplication {
         }
     }
     if (-not $connectorRef -or $connectorRef.id -ne [string]$ConnectorGroupId) {
+        $graphEnvironment = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ENVIRONMENT' -Default 'Global'
         $body = @{
-            '@odata.id' = "https://graph.microsoft.com/beta/onPremisesPublishingProfiles/applicationProxy/connectorGroups/$ConnectorGroupId"
+            '@odata.id' = "$(Get-GsaGraphEndpoint -Environment $graphEnvironment)/beta/onPremisesPublishingProfiles/applicationProxy/connectorGroups/$ConnectorGroupId"
         } | ConvertTo-Json
         if ($PSCmdlet.ShouldProcess($DisplayName, "Assign connector group '$($connector.name)'")) {
             Invoke-MgGraphRequest -Method PUT -Uri "/beta/applications/$($application.id)/connectorGroup/`$ref" -Body $body -ContentType 'application/json' | Out-Null
@@ -462,6 +466,7 @@ function Set-GsaInternetBaseline {
     )
 
     $policy = Get-GsaSingleNamedGraphObject -CollectionUri '/beta/networkAccess/filteringPolicies' -PropertyName name -Name $Name -ObjectDescription 'filtering policy'
+    $policyCreated = $false
     if (-not $policy) {
         $body = @{
             '@odata.type' = '#microsoft.graph.networkaccess.filteringPolicy'
@@ -484,6 +489,7 @@ function Set-GsaInternetBaseline {
         } | ConvertTo-Json -Depth 10
         if ($PSCmdlet.ShouldProcess($Name, 'Create Internet filtering policy')) {
             $policy = Invoke-MgGraphRequest -Method POST -Uri '/beta/networkAccess/filteringPolicies' -Body $body -ContentType 'application/json' -OutputType PSObject
+            $policyCreated = $true
         } else {
             return [pscustomobject]@{ Planned = $true; FilteringPolicyName = $Name; SecurityProfileName = $SecurityProfileName; ConditionalAccessPolicyName = $ConditionalAccessPolicyName }
         }
@@ -493,6 +499,7 @@ function Set-GsaInternetBaseline {
     }
 
     $securityProfile = Get-GsaSingleNamedGraphObject -CollectionUri '/beta/networkAccess/filteringProfiles' -PropertyName name -Name $SecurityProfileName -ObjectDescription 'filtering profile'
+    $securityProfileCreated = $false
     if (-not $securityProfile) {
         $body = @{
             name        = $SecurityProfileName
@@ -503,6 +510,7 @@ function Set-GsaInternetBaseline {
         } | ConvertTo-Json -Depth 5
         if ($PSCmdlet.ShouldProcess($SecurityProfileName, 'Create custom Internet security profile')) {
             $securityProfile = Invoke-MgGraphRequest -Method POST -Uri '/beta/networkAccess/filteringProfiles' -Body $body -ContentType 'application/json' -OutputType PSObject
+            $securityProfileCreated = $true
         } else {
             return [pscustomobject]@{ Planned = $true; FilteringPolicyName = $Name; SecurityProfileName = $SecurityProfileName; ConditionalAccessPolicyName = $ConditionalAccessPolicyName }
         }
@@ -512,6 +520,12 @@ function Set-GsaInternetBaseline {
 
     $links = @(Get-GsaGraphCollection -Uri "/beta/networkAccess/filteringProfiles/$($securityProfile.id)/policies")
     $matchingLinks = @($links | Where-Object { $_.policy.id -eq $policy.id })
+    $policyLinkCreated = $false
+    $policyLinkId = if ($matchingLinks.Count -eq 1 -and $matchingLinks[0].PSObject.Properties['id']) {
+        $matchingLinks[0].id
+    } else {
+        $null
+    }
     if ($matchingLinks.Count -gt 1) {
         throw "Filtering policy '$Name' is linked to '$SecurityProfileName' more than once."
     }
@@ -530,7 +544,9 @@ function Set-GsaInternetBaseline {
             }
         } | ConvertTo-Json -Depth 6
         if ($PSCmdlet.ShouldProcess($Name, "Link policy to custom security profile '$SecurityProfileName'")) {
-            Invoke-MgGraphRequest -Method POST -Uri "/beta/networkAccess/filteringProfiles/$($securityProfile.id)/policies" -Body $body -ContentType 'application/json' | Out-Null
+            $policyLink = Invoke-MgGraphRequest -Method POST -Uri "/beta/networkAccess/filteringProfiles/$($securityProfile.id)/policies" -Body $body -ContentType 'application/json' -OutputType PSObject
+            $policyLinkId = if ($policyLink -and $policyLink.PSObject.Properties['id']) { $policyLink.id } else { $null }
+            $policyLinkCreated = $true
         } else {
             return [pscustomobject]@{ Planned = $true; FilteringPolicyName = $Name; SecurityProfileName = $SecurityProfileName; ConditionalAccessPolicyName = $ConditionalAccessPolicyName }
         }
@@ -539,6 +555,7 @@ function Set-GsaInternetBaseline {
     }
 
     $caPolicy = Get-GsaSingleNamedGraphObject -CollectionUri '/beta/identity/conditionalAccess/policies' -PropertyName displayName -Name $ConditionalAccessPolicyName -ObjectDescription 'Conditional Access policy'
+    $caPolicyCreated = $false
     $internetResourceAppId = '5dc48733-b5df-475c-a49b-fa307ef00853'
     if (-not $caPolicy) {
         $body = @{
@@ -565,6 +582,7 @@ function Set-GsaInternetBaseline {
         } | ConvertTo-Json -Depth 10
         if ($PSCmdlet.ShouldProcess($ConditionalAccessPolicyName, 'Create disabled and unassigned Conditional Access policy')) {
             $caPolicy = Invoke-MgGraphRequest -Method POST -Uri '/beta/identity/conditionalAccess/policies' -Body $body -ContentType 'application/json' -OutputType PSObject
+            $caPolicyCreated = $true
         } else {
             return [pscustomobject]@{ Planned = $true; FilteringPolicyName = $Name; SecurityProfileName = $SecurityProfileName; ConditionalAccessPolicyName = $ConditionalAccessPolicyName }
         }
@@ -575,11 +593,16 @@ function Set-GsaInternetBaseline {
     return [pscustomobject]@{
         FilteringPolicyId         = $policy.id
         FilteringPolicyName       = $Name
+        FilteringPolicyCreated    = $policyCreated
         BlockedCategories         = $categories
         SecurityProfileId         = $securityProfile.id
         SecurityProfileName       = $SecurityProfileName
+        SecurityProfileCreated    = $securityProfileCreated
+        PolicyLinkId              = $policyLinkId
+        PolicyLinkCreated         = $policyLinkCreated
         ConditionalAccessPolicyId = $caPolicy.id
         ConditionalAccessPolicyName = $ConditionalAccessPolicyName
+        ConditionalAccessPolicyCreated = $caPolicyCreated
         ConditionalAccessState    = 'disabled'
         AssignedPrincipals        = @()
     }

@@ -51,7 +51,23 @@ if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
     throw 'Azure CLI is required to resolve the deployment principal.'
 }
 
+$cloud = & az cloud show --query '{name:name,resourceManager:endpoints.resourceManager}' --output json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $cloud.name -or -not $cloud.resourceManager) {
+    throw 'Unable to resolve the active Azure CLI cloud and Resource Manager endpoint.'
+}
+$baseCapability = Get-GsaCloudCapability -AzureCloud $cloud.name
+if ($baseCapability.ArmEndpoint -and $cloud.resourceManager.TrimEnd('/') -ne $baseCapability.ArmEndpoint.TrimEnd('/')) {
+    throw "Azure CLI cloud '$($cloud.name)' returned Resource Manager endpoint '$($cloud.resourceManager)' instead of '$($baseCapability.ArmEndpoint)'."
+}
+
 $environmentName = Get-GsaEnvironmentValue -Name 'AZURE_ENV_NAME' -Required
+Initialize-AzdEnvironmentValue -Name 'AZURE_CLOUD_NAME' -Value $cloud.name
+if ([string]::IsNullOrWhiteSpace($env:GSA_GRAPH_ENVIRONMENT)) {
+    switch ($cloud.name) {
+        'AzureCloud' { Initialize-AzdEnvironmentValue -Name 'GSA_GRAPH_ENVIRONMENT' -Value 'Global' }
+        'AzureChinaCloud' { Initialize-AzdEnvironmentValue -Name 'GSA_GRAPH_ENVIRONMENT' -Value 'China' }
+    }
+}
 Initialize-AzdEnvironmentValue -Name 'AZURE_LOCATION' -Value 'eastus'
 Initialize-AzdEnvironmentValue -Name 'AZURE_RESOURCE_GROUP' -Value "rg-$environmentName-gsa"
 Initialize-AzdEnvironmentValue -Name 'GSA_ORGANIZATION_NAME' -Value $environmentName
@@ -74,6 +90,27 @@ $previewFeatures = @(
 )
 if ($previewFeatures -contains $true) {
     Assert-GsaPreviewGate -Feature 'Configured Microsoft Graph operations' -Enabled $true
+    $graphEnvironment = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ENVIRONMENT' -Required
+    $capability = Get-GsaCloudCapability -AzureCloud $cloud.name -GraphEnvironment $graphEnvironment
+    Assert-GsaCloudCapability -Capability $capability -Surface GraphCoreRead
+    if (@('GSA_M365_PROFILE_STATE', 'GSA_PRIVATE_PROFILE_STATE', 'GSA_INTERNET_PROFILE_STATE') | Where-Object {
+        -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_))
+    }) {
+        Assert-GsaCloudCapability -Capability $capability -Surface ForwardingMutation
+    }
+    if (Get-GsaBoolean $env:GSA_ENABLE_TENANT_ONBOARDING) {
+        Assert-GsaCloudCapability -Capability $capability -Surface TenantOnboarding
+    }
+    if ((Get-GsaBoolean $env:GSA_ENABLE_QUICK_ACCESS) -or (Get-GsaBoolean $env:GSA_ENABLE_PRIVATE_ACCESS_APP)) {
+        Assert-GsaCloudCapability -Capability $capability -Surface GraphMutation
+    }
+    if (Get-GsaBoolean $env:GSA_ENABLE_TLS_INSPECTION) {
+        Assert-GsaCloudCapability -Capability $capability -Surface Tls
+        Assert-GsaCloudCapability -Capability $capability -Surface AzureDataPlane
+    }
+    if (Get-GsaBoolean $env:GSA_ENABLE_INTERNET_BASELINE) {
+        Assert-GsaCloudCapability -Capability $capability -Surface Filtering
+    }
 }
 
 foreach ($name in 'GSA_M365_PROFILE_STATE', 'GSA_PRIVATE_PROFILE_STATE', 'GSA_INTERNET_PROFILE_STATE') {
