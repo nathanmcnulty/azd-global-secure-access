@@ -1,0 +1,35 @@
+name: Publish azd catalog metadata
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .azd/catalog.json
+
+permissions:
+  contents: read
+
+jobs:
+  notify-catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      AZD_CATALOG_TOKEN: ${{ secrets.AZD_CATALOG_TOKEN }}
+
+    steps:
+      - name: Skip when catalog token is not configured
+        if: env.AZD_CATALOG_TOKEN == ''
+        run: echo "AZD_CATALOG_TOKEN is not configured; catalog notification skipped successfully."
+
+      - name: Notify azd website catalog
+        if: env.AZD_CATALOG_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ env.AZD_CATALOG_TOKEN }}
+        run: |
+          gh api --method POST repos/nathanmcnulty/azd-website/dispatches \
+            --field "event_type=azd-catalog-updated" \
+            --field "client_payload[repository]=${GITHUB_REPOSITORY}" \
+            --field "client_payload[ref]=${GITHUB_REF}" \
+            --field "client_payload[catalogPath]=.azd/catalog.json"

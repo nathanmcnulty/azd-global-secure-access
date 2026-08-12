@@ -507,6 +507,14 @@ Before production use:
 - [Intune trusted root profiles](https://learn.microsoft.com/intune/device-configuration/certificates-trusted-root-profiles)
 - [GSA client deployment planning](https://learn.microsoft.com/entra/global-secure-access/how-to-install-windows-client)
 
+## azd website catalog
+
+Repository-owned catalog metadata is stored in [`.azd/catalog.json`](.azd/catalog.json). Update that file when the template title, summary, tags, highlights, featured status, solution count, or quickstart commands change.
+
+Changes to the catalog metadata on `main` trigger the **Publish azd catalog metadata** workflow. The workflow sends an `azd-catalog-updated` repository dispatch to `nathanmcnulty/azd-website` with the source repository, Git ref, and catalog path. It can also be run manually with `workflow_dispatch`.
+
+Maintainers must create the repository Actions secret `AZD_CATALOG_TOKEN` with a fine-grained personal access token that can access `nathanmcnulty/azd-website` and has **Contents: Read and write** permission so it can create repository dispatch events. If the secret is absent, the workflow reports a successful skip instead of failing.
+
 ## License
 
 This project is released under the [Unlicense](LICENSE).
