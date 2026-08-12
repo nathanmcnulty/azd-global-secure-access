@@ -15,6 +15,7 @@ Import-Module (Join-Path $modulePath 'Gsa.Graph.psm1') -Force
 Import-Module (Join-Path $modulePath 'Gsa.State.psm1') -Force
 Import-Module (Join-Path $modulePath 'Gsa.Readiness.psm1') -Force
 Import-Module (Join-Path $modulePath 'Gsa.Observability.psm1') -Force
+Import-Module (Join-Path $modulePath 'Gsa.RemoteNetwork.psm1') -Force
 
 if (-not (Get-Module -ListAvailable Microsoft.Graph.Authentication)) {
     throw 'Install Microsoft.Graph.Authentication before running readiness validation.'
@@ -98,6 +99,20 @@ if ($observabilityPlanPath) {
     Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Observability plan evidence' -Status 'Info' -Classification 'missing' `
         -Detail 'No captured diagnostic-category, route, or table plan is configured. Category and ingestion availability remain unknown.' `
         -Expected 'Optional GSA_OBSERVABILITY_PLAN_PATH' -Actual $null)
+}
+$remoteNetworkPlanPath = Get-GsaEnvironmentValue -Name 'GSA_REMOTE_NETWORK_PLAN_PATH'
+if ($remoteNetworkPlanPath) {
+    if (-not (Test-Path -LiteralPath $remoteNetworkPlanPath)) {
+        Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Remote-network plan evidence' -Status 'Fail' -Classification 'missing' `
+            -Detail "Configured plan path '$remoteNetworkPlanPath' does not exist." -Expected 'Deterministic secret-free remote-network plan JSON' -Actual $null)
+    } else {
+        $remoteNetworkPlan = Get-Content -LiteralPath $remoteNetworkPlanPath -Raw | ConvertFrom-Json -Depth 100
+        foreach ($check in @(Test-GsaRemoteNetworkEvidence -Plan $remoteNetworkPlan)) { Add-GsaCheck $check }
+    }
+} else {
+    Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Remote-network plan evidence' -Status 'Info' -Classification 'missing' `
+        -Detail 'No captured remote-network plan is configured. Remote-network, device-link, association, health, CPE, and Adaptive Access readiness remain unverified.' `
+        -Expected 'Optional GSA_REMOTE_NETWORK_PLAN_PATH' -Actual $null)
 }
 $manifestBaselineResources = if ($manifest) {
     @($manifest.resources | Where-Object kind -in @(
