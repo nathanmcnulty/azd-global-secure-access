@@ -1,6 +1,6 @@
 name: azd-global-secure-access
 metadata:
-  template: azd-global-secure-access@0.2.0
+  template: azd-global-secure-access@0.3.0
 
 requiredVersions:
   azd: ">= 1.30.0"

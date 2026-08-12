@@ -1,0 +1,50 @@
+{
+  "discoveredCategories": [
+    "AuditLogs",
+    "RemoteNetworkHealthLogs",
+    "FutureNetworkAccessCategory"
+  ],
+  "settings": [
+    {
+      "id": "/providers/Microsoft.AADIAM/diagnosticSettings/security-owned",
+      "name": "security-owned",
+      "properties": {
+        "workspaceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-monitor/providers/Microsoft.OperationalInsights/workspaces/law-existing",
+        "logs": [
+          {
+            "category": "AuditLogs",
+            "enabled": true,
+            "futureLogField": "preserved"
+          }
+        ],
+        "futureSettingField": "preserved"
+      }
+    },
+    {
+      "name": "gsa-observability",
+      "properties": {
+        "workspaceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-other/providers/Microsoft.OperationalInsights/workspaces/law-other",
+        "logs": []
+      }
+    }
+  ],
+  "clientEvidence": {
+    "clients": [
+      {
+        "platform": "FutureOS",
+        "version": "1.0",
+        "health": "futureHealthState",
+        "futureClientField": "preserved"
+      },
+      {
+        "version": "2.0",
+        "health": "healthy",
+        "futureClientField": "platform-omitted"
+      }
+    ],
+    "conflicts": {
+      "vpn": "futureConflictState",
+      "dnsNrpt": "unknown"
+    }
+  }
+}

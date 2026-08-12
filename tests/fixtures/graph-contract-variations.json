@@ -1,0 +1,47 @@
+{
+  "tenantStatus": {
+    "known": {
+      "onboardingStatus": "onboarded",
+      "futureTenantField": "preserved"
+    },
+    "unknownEnum": {
+      "onboardingStatus": "migrationFutureValue",
+      "futureTenantField": "preserved"
+    },
+    "ambiguous": {
+      "futureTenantField": "status-omitted"
+    }
+  },
+  "forwardingProfiles": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "trafficForwardingType": "m365",
+      "state": "enabled",
+      "futureProfileField": "preserved"
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "trafficForwardingType": "futureTrafficType",
+      "state": "futureState",
+      "futureProfileField": "preserved"
+    },
+    {
+      "trafficForwardingType": "internet",
+      "state": "enabled",
+      "futureProfileField": "identity-omitted"
+    }
+  ],
+  "deployments": [
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "status": {
+        "deploymentStage": "rollingBackFutureValue",
+        "futureStatusField": "preserved"
+      }
+    },
+    {
+      "id": "44444444-4444-4444-4444-444444444444",
+      "futureDeploymentField": "status-omitted"
+    }
+  ]
+}
