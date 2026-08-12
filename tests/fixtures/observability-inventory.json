@@ -1,0 +1,26 @@
+{
+  "discoveredCategories": [
+    "AuditLogs",
+    "NetworkAccessTrafficLogs",
+    "RemoteNetworkHealthLogs",
+    "FutureCategory"
+  ],
+  "availableTables": [
+    "NetworkAccessTraffic"
+  ],
+  "existingSettings": [
+    {
+      "id": "/providers/Microsoft.AADIAM/diagnosticSettings/security-owned",
+      "name": "security-owned",
+      "properties": {
+        "workspaceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-monitor/providers/Microsoft.OperationalInsights/workspaces/law-existing",
+        "logs": [
+          { "category": "AuditLogs", "enabled": true },
+          { "category": "NetworkAccessTrafficLogs", "enabled": true },
+          { "category": "FutureCategory", "enabled": true }
+        ],
+        "futureDestination": { "preserve": true }
+      }
+    }
+  ]
+}

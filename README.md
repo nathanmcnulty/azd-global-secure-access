@@ -155,7 +155,9 @@ The pre-provision hook supplies safe defaults for:
 | `AZURE_PRINCIPAL_ID` | current token `oid` | Principal receiving data-plane roles |
 | `AZURE_PRINCIPAL_TYPE` | inferred | `User`, `ServicePrincipal`, or `Group` |
 | `GSA_ENABLE_DIAGNOSTICS` | `false` | Enable Key Vault diagnostics |
-| `GSA_LOG_ANALYTICS_WORKSPACE_ID` | empty | Existing workspace resource ID |
+| `GSA_LOG_ANALYTICS_WORKSPACE_ID` | empty | Explicitly supplied existing workspace resource ID; the template does not create a workspace |
+| `GSA_OBSERVABILITY_PLAN_PATH` | empty | Optional deterministic observability-plan JSON included in the read-only readiness report |
+| `GSA_CLIENT_READINESS_EVIDENCE_PATH` | empty | Optional sanitized endpoint/Intune evidence JSON included in readiness; never include browsing, prompt, credential, or payload content |
 | `GSA_ENABLE_DEFENDER_FOR_KEY_VAULT` | `false` | Enable the billable subscription plan |
 | `GSA_ENABLE_PRIVATE_ENDPOINT` | `false` | Deploy Key Vault private endpoint |
 | `GSA_PRIVATE_ENDPOINT_SUBNET_ID` | empty | Existing subnet resource ID |
@@ -355,6 +357,8 @@ pwsh ./scripts/Test-GsaReadiness.ps1 -OutputPath ./TestResults/gsa-readiness.jso
 
 The command emits human-readable status lines and returns structured JSON. Use `-JsonOnly` when the success stream must contain only JSON. Every check has a `status`, `classification`, expected value, actual value, detail, resource key, and ownership where known.
 
+Optional observability and client inputs extend the same report without changing Azure, Microsoft Entra, Intune, endpoints, routers, VPNs, DNS/NRPT, QUIC, Hyper-V, WSL, proxy, or Defender configuration. An Intune client or trusted-root assignment is configuration evidence only; it is not proof of installation, root acquisition, forwarding, traffic acquisition, or healthy client operation. Unknown fields and enum values remain evidence and are classified as transitional rather than coerced to healthy.
+
 Classifications are `managed`, `reused`, `missing`, `changed`, `unmanagedConflict`, `unsupported`, and `unknownTransitional`. The report:
 
 - validates the Azure/Graph cloud and endpoint contract and tenant consistency;
@@ -369,6 +373,28 @@ Classifications are `managed`, `reused`, `missing`, `changed`, `unmanagedConflic
 - retrieves the committed CRL, verifies its exact SHA-256 fingerprint, and reports seven-day/expired thresholds;
 - compares committed object IDs and desired fingerprints through GET-only Graph calls;
 - verifies the managed Internet policy chain whenever it is enabled for execution or recorded in committed state.
+
+### Existing-workspace observability planning
+
+Key Vault diagnostics configured by `GSA_ENABLE_DIAGNOSTICS` are an Azure resource diagnostic setting and remain separate from Microsoft Entra tenant-scoped Global Secure Access diagnostics. Both require the full resource ID of an existing Log Analytics workspace; this template never creates a workspace by default.
+
+Create a sanitized read-only inventory containing `discoveredCategories`, `existingSettings`, and `availableTables`, then generate deterministic JSON/text plans and schema-tolerant source assets:
+
+```powershell
+pwsh ./scripts/New-GsaObservabilityPlan.ps1 `
+  -InventoryPath ./tests/fixtures/observability-inventory.json `
+  -WorkspaceResourceId $env:GSA_LOG_ANALYTICS_WORKSPACE_ID
+```
+
+The planner performs no Azure or Graph mutation. It fingerprints the current inventory, preserves every existing unmanaged destination and category route, and grants future update eligibility only when the exact diagnostic-setting ID is recorded with `ownership: managed` in the committed GSA manifest. A matching name never establishes ownership. Name/destination conflicts block rather than replace an existing setting.
+
+To validate a reviewed plan, supply `-PlanPath`, the exact `-AcknowledgePlanId`, and a tenant deployment location. Apply mode re-reads the current tenant diagnostic categories and settings with GET-only ARM calls, verifies the Azure tenant against the ownership manifest, and rejects any changed inventory before producing deployment source. Without `-Execute`, the script stops there. `-Execute` is the sole opt-in mutation gate: it writes a pending ownership transaction before `az deployment tenant create`, preserves unknown properties on an existing exact-ID managed setting, and commits the resulting exact object ID only after success. It never edits or deletes another diagnostic setting or destination.
+
+The stable Azure Monitor diagnostic-settings mechanism must be distinguished from the maturity of individual GSA categories. The planner recognizes documented categories such as `NetworkAccessTrafficLogs`, `AuditLogs`, `EnrichedOffice365AuditLogs`, `RemoteNetworkHealthLogs`, and `NetworkAccessGenerativeAIInsights`, but proposes a category only when runtime discovery shows that the tenant currently exposes it. Several categories remain preview and can vary by tenant and documentation date.
+
+Generated workbook and scheduled-query alert sources use `union isfuzzy=true`, `column_ifexists()`, and explicit type conversion for connector/remote-network health, deployment errors, aggregate traffic evidence, and certificate/CRL expiry. Assets and alerts remain disabled until the expected category and table are observed and an operator establishes a baseline. A table might not exist until the first records are ingested; empty or absent data shortly after configuration is inconclusive, not proof of health or failure. Azure Monitor ingestion and GSA policy/client propagation can be delayed.
+
+Default queries omit destination URLs/FQDNs, user principal names, source IPs, prompt content, and request/response payloads. This is especially important for Generative AI Insights, which can contain sensitive prompt and MCP content. Workspace owners remain responsible for RBAC, regional/data-residency policy, retention, archive, query, alert, Sentinel, and ingestion costs. Review duplicate settings and category routing before any later opt-in deployment because sending the same category to multiple settings can duplicate data and cost.
 
 It exits nonzero only for clear failed readiness conditions, unsupported requested surfaces, missing required authorization, tenant conflict, or changed/unmanaged committed resources. A missing object retained only as historical ownership evidence is a warning until the later cleanup layer can mark it retired. Missing optional license-read consent and inconclusive role/license evidence are also warnings.
 
@@ -551,7 +577,9 @@ At minimum:
 | Readiness and drift inventory | Graph beta/v1.0 plus CRL HTTP read; connector-group GET APIs currently require `Directory.ReadWrite.All` | Non-mutating text and JSON report; optional CI or change-promotion gate |
 | Cleanup plan | Local ownership manifest plus optional Graph reads | Deterministic JSON/text report during `predown`; no Graph mutation |
 | Forwarding outage recovery | Graph beta forwarding profile state | Separate expiring plan, exact acknowledgement, stale-state checks, captured-state restore, sanitized audit |
-| Traffic, deployment, and remote-network health logs | Graph beta and Microsoft Entra diagnostic settings | Documented monitoring target; no subscription-level diagnostic mutation by default |
+| Tenant GSA diagnostics | Stable Microsoft Entra diagnostic-setting mechanism; individual GSA categories can be preview | Discovery-first deterministic plan to an existing workspace; unmanaged routes preserved; no mutation by default |
+| Workbook and alert source assets | Azure Monitor KQL/scheduled-query mechanisms with evolving GSA schemas | Schema-tolerant, privacy-safe, table-gated, and disabled by default; partial evidence rather than complete detection coverage |
+| Client and Intune readiness evidence | Read-only captured evidence | Assignment/configuration is not proof of installation, acquisition, forwarding, or health; no endpoint mutation |
 
 Quick Access supports at most 500 segments, and nested group assignment is not supported. Security-profile and Conditional Access propagation can take 60-90 minutes.
 
