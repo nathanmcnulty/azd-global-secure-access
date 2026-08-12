@@ -14,6 +14,7 @@ Import-Module (Join-Path $modulePath 'Gsa.Common.psm1') -Force
 Import-Module (Join-Path $modulePath 'Gsa.Graph.psm1') -Force
 Import-Module (Join-Path $modulePath 'Gsa.State.psm1') -Force
 Import-Module (Join-Path $modulePath 'Gsa.Readiness.psm1') -Force
+Import-Module (Join-Path $modulePath 'Gsa.Observability.psm1') -Force
 
 if (-not (Get-Module -ListAvailable Microsoft.Graph.Authentication)) {
     throw 'Install Microsoft.Graph.Authentication before running readiness validation.'
@@ -67,6 +68,36 @@ if ($manifest) {
     Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'State manifest' -Status 'Warning' -Classification 'missing' `
         -Detail "No committed state manifest exists at '$manifestPath'. Ownership cannot be inferred from names." `
         -Expected 'Committed versioned manifest' -Actual $null)
+}
+
+$clientEvidencePath = Get-GsaEnvironmentValue -Name 'GSA_CLIENT_READINESS_EVIDENCE_PATH'
+if ($clientEvidencePath) {
+    if (-not (Test-Path -LiteralPath $clientEvidencePath)) {
+        Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Client readiness evidence' -Status 'Fail' -Classification 'missing' `
+            -Detail "Configured evidence path '$clientEvidencePath' does not exist." -Expected 'Sanitized JSON evidence file' -Actual $null)
+    } else {
+        $clientEvidence = Get-Content -LiteralPath $clientEvidencePath -Raw | ConvertFrom-Json -Depth 100
+        foreach ($check in @(Test-GsaClientEvidence -Evidence $clientEvidence)) { Add-GsaCheck $check }
+    }
+} else {
+    Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Client readiness evidence' -Status 'Info' -Classification 'missing' `
+        -Detail 'No sanitized endpoint evidence path is configured. Intune assignment is not treated as proof of client installation, trusted-root acquisition, traffic forwarding, or health.' `
+        -Expected 'Optional GSA_CLIENT_READINESS_EVIDENCE_PATH' -Actual $null)
+}
+
+$observabilityPlanPath = Get-GsaEnvironmentValue -Name 'GSA_OBSERVABILITY_PLAN_PATH'
+if ($observabilityPlanPath) {
+    if (-not (Test-Path -LiteralPath $observabilityPlanPath)) {
+        Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Observability plan evidence' -Status 'Fail' -Classification 'missing' `
+            -Detail "Configured plan path '$observabilityPlanPath' does not exist." -Expected 'Deterministic observability plan JSON' -Actual $null)
+    } else {
+        $observabilityPlan = Get-Content -LiteralPath $observabilityPlanPath -Raw | ConvertFrom-Json -Depth 100
+        foreach ($check in @(Test-GsaObservabilityEvidence -Plan $observabilityPlan)) { Add-GsaCheck $check }
+    }
+} else {
+    Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Observability plan evidence' -Status 'Info' -Classification 'missing' `
+        -Detail 'No captured diagnostic-category, route, or table plan is configured. Category and ingestion availability remain unknown.' `
+        -Expected 'Optional GSA_OBSERVABILITY_PLAN_PATH' -Actual $null)
 }
 $manifestBaselineResources = if ($manifest) {
     @($manifest.resources | Where-Object kind -in @(

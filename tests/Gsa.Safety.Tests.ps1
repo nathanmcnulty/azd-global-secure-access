@@ -16,6 +16,8 @@ BeforeAll {
     $certificateText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Certificate.psm1') -Raw
     $intuneText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Intune.psm1') -Raw
     $azureYamlText = Get-Content (Join-Path $repoRoot 'azure.yaml') -Raw
+    $observabilityText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Observability.psm1') -Raw
+    $observabilityPlanText = Get-Content (Join-Path $repoRoot 'scripts\New-GsaObservabilityPlan.ps1') -Raw
 }
 
 Describe 'PowerShell syntax' {
@@ -128,6 +130,22 @@ Describe 'Tenant scope safety contract' {
         $readinessText | Should -Match 'Directory\.ReadWrite\.All'
         $readinessText | Should -Match 'Test-GsaInternetBaseline'
         $readinessText | Should -Not -Match 'Invoke-MgGraphRequest\s+-Method\s+(POST|PATCH|PUT|DELETE)'
+    }
+
+    It 'keeps observability and client readiness plan-first and non-mutating' {
+        $observabilityPlanText | Should -Match 'AcknowledgePlanId must exactly match'
+        $observabilityPlanText | Should -Match 'diagnosticSettingsCategories\?api-version=2017-04-01-preview'
+        $observabilityPlanText | Should -Match 'The Azure tenant does not match the ownership manifest'
+        $observabilityPlanText | Should -Match 'Assert-GsaObservabilityPlanCurrent'
+        $observabilityPlanText | Should -Match 'Write-GsaPendingTransaction'
+        $observabilityPlanText.IndexOf('Write-GsaPendingTransaction') | Should -BeLessThan $observabilityPlanText.IndexOf('az deployment tenant create')
+        $observabilityPlanText | Should -Match '\[switch\]\$Execute'
+        $observabilityText | Should -Match 'explicitly supplied existing Log Analytics workspace'
+        $observabilityText | Should -Match 'Existing unmanaged routes are preserved'
+        $observabilityText | Should -Match 'Assignment is configuration evidence only'
+        $observabilityText | Should -Match 'DestinationUrl'
+        $observabilityText | Should -Match 'Content'
+        $bicepText | Should -Not -Match 'Microsoft\.OperationalInsights/workspaces@'
     }
 
     It 'never assigns Intune profiles broadly by default' {
