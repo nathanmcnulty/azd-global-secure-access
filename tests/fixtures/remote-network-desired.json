@@ -1,0 +1,22 @@
+{
+  "name": "New Reviewed Branch",
+  "region": "eastUS",
+  "forwardingProfileTypes": ["m365", "internet"],
+  "deviceLink": {
+    "name": "Primary IKEv2 link",
+    "ipAddress": "203.0.113.10",
+    "bandwidthCapacityInMbps": "mbps500",
+    "bgpConfiguration": {
+      "localIpAddress": "169.254.21.1",
+      "peerIpAddress": "169.254.21.2",
+      "asn": 65010
+    },
+    "redundancyConfiguration": {
+      "redundancyTier": "zoneRedundancy",
+      "zoneLocalIpAddress": "169.254.21.3"
+    },
+    "tunnelConfiguration": {
+      "@odata.type": "#microsoft.graph.networkaccess.tunnelConfigurationIKEv2Default"
+    }
+  }
+}

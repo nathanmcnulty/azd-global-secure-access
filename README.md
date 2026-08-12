@@ -47,6 +47,7 @@ The design separates:
 - Optionally create a reviewed Internet Access web-category policy, custom security profile, and disabled Conditional Access policy
 - Commit a versioned, non-secret ownership manifest beside the selected azd environment after successful configuration
 - Run read-only readiness and drift validation across cloud support, authorization, licensing indicators, onboarding, forwarding rules, connectors, deployment logs, Adaptive Access settings, certificates, CRLs, and managed objects
+- Capture GET-only remote-network, device-link, association, deployment, health, named-location, Conditional Access, and Adaptive Access evidence; generate deterministic plans and secret-free vendor-neutral CPE checklists
 
 ## Safety defaults
 
@@ -64,6 +65,8 @@ The design separates:
 - A custom CRL hostname must resolve and serve the exact CRL before its URL is embedded in a certificate.
 - Broad Intune assignment remains gated by `GSA_ACKNOWLEDGE_LAB_MODE=true`; Internet filtering is created unassigned and disabled.
 - `azd down` removes Azure resources only. Tenant objects are intentionally not deleted.
+- Remote-network automation is commercial-cloud Graph-beta creation only. Existing remote networks, links, forwarding-profile associations, routers, connectors, and Adaptive Access settings are never changed automatically.
+- Remote-network plans, CPE packages, manifests, reports, fixtures, and logs never contain PSKs. Explicit execution accepts the shared secret only as an in-memory `SecureString`.
 
 ## Prerequisites
 
@@ -158,6 +161,7 @@ The pre-provision hook supplies safe defaults for:
 | `GSA_LOG_ANALYTICS_WORKSPACE_ID` | empty | Explicitly supplied existing workspace resource ID; the template does not create a workspace |
 | `GSA_OBSERVABILITY_PLAN_PATH` | empty | Optional deterministic observability-plan JSON included in the read-only readiness report |
 | `GSA_CLIENT_READINESS_EVIDENCE_PATH` | empty | Optional sanitized endpoint/Intune evidence JSON included in readiness; never include browsing, prompt, credential, or payload content |
+| `GSA_REMOTE_NETWORK_PLAN_PATH` | empty | Optional deterministic, secret-free remote-network plan JSON included in readiness |
 | `GSA_ENABLE_DEFENDER_FOR_KEY_VAULT` | `false` | Enable the billable subscription plan |
 | `GSA_ENABLE_PRIVATE_ENDPOINT` | `false` | Deploy Key Vault private endpoint |
 | `GSA_PRIVATE_ENDPOINT_SUBNET_ID` | empty | Existing subnet resource ID |
@@ -179,6 +183,38 @@ Defender for Key Vault changes subscription billing. Private endpoint mode disab
 | `GSA_ALLOW_UNDOCUMENTED_TENANT_ONBOARDING` | `false` | Required because no OAuth permission is documented |
 
 Graph `trafficForwardingType=m365` represents the visible Microsoft 365 traffic profile. The separate Microsoft Entra traffic profile is system-managed and cannot be independently changed. This template never relies on localized profile names; it resolves the profile by `trafficForwardingType`.
+
+### Remote networks and Adaptive Access readiness
+
+Remote-network APIs are Microsoft Graph beta and this layer is validated only for `AzureCloud` with the `Global` Graph endpoint. Inventory is GET-only:
+
+```powershell
+./scripts/Get-GsaRemoteNetworkInventory.ps1 -OutputPath .azure/<environment>/remote-network-inventory.json
+./scripts/New-GsaRemoteNetworkPlan.ps1 `
+  -ConfigurationPath ./remote-network-desired.json `
+  -InventoryPath .azure/<environment>/remote-network-inventory.json
+```
+
+The inventory reads subscribed SKUs with `LicenseAssignment.Read.All` and records a conservative purchased-seat indicator without double-counting overlapping bundles. The plan validates the published region list, a public CPE address, BGP addresses and 2-byte ASN exclusions, 250/500/750/1000-Mbps tunnel capacity, IKEv2/IPsec combinations, NAT-T expectations, and redundancy. It classifies ownership only by exact manifest object ID. A same-name existing object is reused/unmanaged and blocks creation; even an exact managed existing object remains inventory-only in this layer.
+
+At least 50 qualifying purchased licenses are documented for remote-network connectivity. The report maps the captured count to Microsoft's documented tenant bandwidth table, but subscribed SKU or purchase evidence is advisory and cannot prove assignment or individual entitlement. A static public CPE IP, UDP 500/4500, TCP 179, route-based VPN, any-to-any traffic selectors, and at least two tunnels per site are recommended.
+
+Creation requires the exact reviewed plan ID, current-state and manifest fingerprint checks, `-Execute`, and an in-memory `SecureString`:
+
+```powershell
+$sharedSecret = Read-Host 'Enter the shared secret' -AsSecureString
+./scripts/New-GsaRemoteNetworkPlan.ps1 `
+  -ConfigurationPath ./remote-network-desired.json `
+  -InventoryPath .azure/<environment>/remote-network-inventory.json `
+  -PlanPath .azure/<environment>/remote-network/plan.json `
+  -AcknowledgePlanId <reviewed-plan-id> `
+  -PreSharedKey $sharedSecret `
+  -Execute
+```
+
+Only a new unclaimed remote network and its new device link can be created. The command never updates or deletes existing links, never changes forwarding-profile associations, never modifies a router, and never installs/registers a connector. Microsoft documents that associating only the Microsoft profile or only the Internet profile can silently drop the other traffic class; association changes therefore remain a reviewed portal/manual step. Private Access traffic profiles are not supported for remote networks.
+
+The CPE output is vendor-neutral, contains no executable router command and no shared secret, and requires the operator to reverse local/peer BGP addresses on the CPE. Source-IP restoration, compliant-network signaling, named-location and Conditional Access dependencies, break-glass exclusions, and Universal CAE are reported read-only. Universal CAE is platform behavior rather than a deployable resource. No Adaptive Access setting is enabled or disabled automatically because an exact lockout-safe mutation contract is not established here.
 
 Example:
 
@@ -580,6 +616,11 @@ At minimum:
 | Tenant GSA diagnostics | Stable Microsoft Entra diagnostic-setting mechanism; individual GSA categories can be preview | Discovery-first deterministic plan to an existing workspace; unmanaged routes preserved; no mutation by default |
 | Workbook and alert source assets | Azure Monitor KQL/scheduled-query mechanisms with evolving GSA schemas | Schema-tolerant, privacy-safe, table-gated, and disabled by default; partial evidence rather than complete detection coverage |
 | Client and Intune readiness evidence | Read-only captured evidence | Assignment/configuration is not proof of installation, acquisition, forwarding, or health; no endpoint mutation |
+| Remote-network inventory and health | Graph beta GET plus captured evidence | Remote networks, device links, associations, deployment status/errors, health, and unknown fields are preserved in JSON/text classifications |
+| Remote-network creation | Graph beta | Commercial Global endpoint only; deterministic stale-checked creation of one new unclaimed network/link with exact acknowledgement and secure in-memory shared-secret input |
+| Forwarding-profile associations | Graph beta branch association surface | Report/manual only because incomplete Microsoft/Internet associations can silently drop traffic; existing associations are never overwritten |
+| Router and connector configuration | External CPE/host | Vendor-neutral checklist only; no router mutation or connector installation/registration |
+| Source-IP, compliant-network, Adaptive Access, and Universal CAE | Graph beta/v1.0 read evidence plus platform behavior | Read-only dependency and lockout readiness; Universal CAE is not deployed; settings are never automatically disabled |
 
 Quick Access supports at most 500 segments, and nested group assignment is not supported. Security-profile and Conditional Access propagation can take 60-90 minutes.
 
@@ -626,6 +667,10 @@ Before production use:
 - [Graph external CA certificate API](https://learn.microsoft.com/graph/api/resources/networkaccess-externalcertificateauthoritycertificate?view=graph-rest-beta)
 - [Intune trusted root profiles](https://learn.microsoft.com/intune/device-configuration/certificates-trusted-root-profiles)
 - [GSA client deployment planning](https://learn.microsoft.com/entra/global-secure-access/how-to-install-windows-client)
+- [Create a remote network](https://learn.microsoft.com/graph/api/networkaccess-connectivitycontainer-post-remotenetworks?view=graph-rest-beta)
+- [Create a remote-network device link](https://learn.microsoft.com/graph/api/networkaccess-remotenetwork-post-devicelinks?view=graph-rest-beta)
+- [Global Secure Access remote-network connectivity](https://learn.microsoft.com/entra/global-secure-access/how-to-configure-remote-networks)
+- [Remote-network connectivity and bandwidth](https://learn.microsoft.com/entra/global-secure-access/reference-remote-network-connectivity)
 
 ## License
 

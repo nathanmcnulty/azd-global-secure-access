@@ -18,6 +18,9 @@ BeforeAll {
     $azureYamlText = Get-Content (Join-Path $repoRoot 'azure.yaml') -Raw
     $observabilityText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.Observability.psm1') -Raw
     $observabilityPlanText = Get-Content (Join-Path $repoRoot 'scripts\New-GsaObservabilityPlan.ps1') -Raw
+    $remoteNetworkText = Get-Content (Join-Path $repoRoot 'scripts\modules\Gsa.RemoteNetwork.psm1') -Raw
+    $remoteNetworkPlanText = Get-Content (Join-Path $repoRoot 'scripts\New-GsaRemoteNetworkPlan.ps1') -Raw
+    $remoteNetworkInventoryText = Get-Content (Join-Path $repoRoot 'scripts\Get-GsaRemoteNetworkInventory.ps1') -Raw
 }
 
 Describe 'PowerShell syntax' {
@@ -146,6 +149,31 @@ Describe 'Tenant scope safety contract' {
         $observabilityText | Should -Match 'DestinationUrl'
         $observabilityText | Should -Match 'Content'
         $bicepText | Should -Not -Match 'Microsoft\.OperationalInsights/workspaces@'
+    }
+
+    It 'keeps remote-network and Adaptive Access operations plan-first and narrowly create-only' {
+        $remoteNetworkPlanText | Should -Match 'AcknowledgePlanId must exactly match'
+        $remoteNetworkPlanText | Should -Match '\[SecureString\]\$PreSharedKey'
+        $remoteNetworkPlanText | Should -Match '\[switch\]\$Execute'
+        $remoteNetworkPlanText | Should -Match 'Assert-GsaRemoteNetworkPlanCurrent'
+        $remoteNetworkPlanText | Should -Match 'Write-GsaPendingTransaction'
+        $remoteNetworkPlanText.IndexOf('Write-GsaPendingTransaction') | Should -BeLessThan $remoteNetworkPlanText.IndexOf("-Method POST -Uri '/beta/networkAccess/connectivity/remoteNetworks'")
+        $remoteNetworkPlanText | Should -Not -Match 'Invoke-MgGraphRequest\s+-Method\s+(PATCH|PUT|DELETE)'
+        $remoteNetworkInventoryText | Should -Not -Match 'Invoke-MgGraphRequest\s+-Method\s+(POST|PATCH|PUT|DELETE)'
+        $remoteNetworkText | Should -Match 'Universal CAE is platform behavior, not a deployable resource'
+        $remoteNetworkText | Should -Match 'existing remote networks, device links, and forwarding-profile associations are never mutated'
+        $remoteNetworkPlanText | Should -Not -Match 'connectorGroups/.*/members.*-Method\s+(POST|PATCH|PUT|DELETE)'
+        $remoteNetworkPlanText | Should -Match 'remoteNetworkCreated-deviceLinkPending'
+        $remoteNetworkPlanText | Should -Match 'automatedRollback = \$false'
+    }
+
+    It 'never persists or prints remote-network shared secrets' {
+        $fixtureText = (Get-ChildItem (Join-Path $repoRoot 'tests\fixtures') -Filter *.json | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+        $fixtureText | Should -Not -Match '(?i)pre.?shared.?key|\bpsk\b'
+        $remoteNetworkPlanText | Should -Not -Match 'Write-(Host|Information|Output|Verbose|Debug).*PreSharedKey'
+        $remoteNetworkPlanText | Should -Not -Match 'azd env set.*(?i:psk|pre.?shared)'
+        $remoteNetworkPlanText | Should -Match "Remove\('preSharedKey'\)"
+        $remoteNetworkPlanText | Should -Match 'Provider error details were suppressed because they might echo the sensitive request body'
     }
 
     It 'never assigns Intune profiles broadly by default' {
