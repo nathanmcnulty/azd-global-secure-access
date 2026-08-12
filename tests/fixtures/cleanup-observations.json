@@ -1,0 +1,22 @@
+{
+  "connectorGroup:fixture": {
+    "objectId": "00000000-0000-0000-0000-000000000030",
+    "classification": "reused",
+    "current": { "id": "00000000-0000-0000-0000-000000000030" }
+  },
+  "forwardingProfile:internet": {
+    "objectId": "00000000-0000-0000-0000-000000000010",
+    "classification": "managed",
+    "current": { "state": "enabled", "trafficForwardingType": "internet" }
+  },
+  "privateApplication:quickaccessapp:fixture": {
+    "objectId": "00000000-0000-0000-0000-000000000020",
+    "classification": "managed",
+    "current": { "displayName": "Fixture Quick Access" }
+  },
+  "tlsCertificate:fixture": {
+    "objectId": "00000000-0000-0000-0000-000000000040",
+    "classification": "managed",
+    "current": { "status": "active" }
+  }
+}

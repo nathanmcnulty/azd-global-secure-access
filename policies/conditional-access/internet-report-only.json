@@ -1,0 +1,31 @@
+{
+  "displayName": "GSA Internet Access - report-only pilot",
+  "state": "enabledForReportingButNotEnforced",
+  "conditions": {
+    "applications": {
+      "includeApplications": [
+        "5dc48733-b5df-475c-a49b-fa307ef00853"
+      ]
+    },
+    "users": {
+      "includeGroups": [
+        "<pilot-group-object-id>"
+      ],
+      "excludeUsers": [
+        "<emergency-access-account-object-id-1>",
+        "<emergency-access-account-object-id-2>"
+      ]
+    }
+  },
+  "grantControls": {
+    "operator": "OR",
+    "builtInControls": [
+      "block"
+    ]
+  },
+  "deploymentNotes": {
+    "templateOnly": true,
+    "automaticMutation": false,
+    "requiredReview": "Replace placeholders, validate emergency access from an out-of-band path, review policy impact, and retain report-only mode through the pilot window."
+  }
+}

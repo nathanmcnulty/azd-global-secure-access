@@ -1,0 +1,39 @@
+{
+  "displayName": "GSA Compliant Network - report-only pilot",
+  "state": "enabledForReportingButNotEnforced",
+  "conditions": {
+    "applications": {
+      "includeApplications": [
+        "<reviewed-resource-app-id>"
+      ]
+    },
+    "locations": {
+      "includeLocations": [
+        "All"
+      ],
+      "excludeLocations": [
+        "<compliant-network-named-location-id>"
+      ]
+    },
+    "users": {
+      "includeGroups": [
+        "<pilot-group-object-id>"
+      ],
+      "excludeUsers": [
+        "<emergency-access-account-object-id-1>",
+        "<emergency-access-account-object-id-2>"
+      ]
+    }
+  },
+  "grantControls": {
+    "operator": "OR",
+    "builtInControls": [
+      "block"
+    ]
+  },
+  "deploymentNotes": {
+    "templateOnly": true,
+    "automaticMutation": false,
+    "requiredReview": "First verify source IP restoration, compliant-network signaling, named-location state, emergency access exclusions, and policy impact. Assignment does not prove that traffic is acquired by Global Secure Access."
+  }
+}
