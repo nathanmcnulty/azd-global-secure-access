@@ -44,7 +44,7 @@ The design separates:
 - Publish and verify a Key Vault-signed CRL before requesting a GSA CSR
 - Sign and upload the GSA subordinate CA certificate and chain
 - Create/update Intune trusted-root profiles without replacing their existing assignments
-- Optionally create and link a reviewed Internet Access web-category filtering policy to the built-in baseline
+- Optionally create a reviewed Internet Access web-category policy, custom security profile, and disabled Conditional Access policy
 
 ## Safety defaults
 
@@ -57,7 +57,7 @@ The design separates:
 - Unknown and transitional Graph certificate status values are retained and surfaced.
 - The CRL number always increases, even if the local clock moves backward.
 - A custom CRL hostname must resolve and serve the exact CRL before its URL is embedded in a certificate.
-- Broad or tenant-wide lab actions require `GSA_ACKNOWLEDGE_LAB_MODE=true`.
+- Broad Intune assignment remains gated by `GSA_ACKNOWLEDGE_LAB_MODE=true`; Internet filtering is created unassigned and disabled.
 - `azd down` removes Azure resources only. Tenant objects are intentionally not deleted.
 
 ## Prerequisites
@@ -95,6 +95,7 @@ Typical delegated roles:
 | Surface | Delegated permission |
 |---|---|
 | Tenant state, forwarding profiles, TLS, filtering | `NetworkAccess.ReadWrite.All` |
+| Internet filtering Conditional Access policy | `Policy.ReadWrite.ConditionalAccess` |
 | Quick Access/Private Access application | `Directory.ReadWrite.All` |
 | Pilot app-role assignment | `AppRoleAssignment.ReadWrite.All` |
 | Intune trusted roots | `DeviceManagementConfiguration.ReadWrite.All` |
@@ -229,7 +230,7 @@ Do not configure overlapping IP/CIDR destinations on multiple Private Access app
 | `GSA_ALLOW_UNDOCUMENTED_CERTIFICATE_ENABLE` | `false` | Opt in to the portal-observed, undocumented status PATCH |
 | `GSA_INTUNE_PLATFORMS` | modern platform list | Comma-separated platforms |
 | `GSA_INTUNE_ASSIGNMENT_MODE` | `None` | `None`, `PilotGroup`, or `AllDevices` |
-| `GSA_ACKNOWLEDGE_LAB_MODE` | `false` | Required for All Devices or tenant-wide lab changes |
+| `GSA_ACKNOWLEDGE_LAB_MODE` | `false` | Required for Intune All Devices assignment |
 
 Supported automatic trusted-root types:
 
@@ -257,12 +258,17 @@ The optional `GSA_ALLOW_UNDOCUMENTED_CERTIFICATE_ENABLE=true` path is for tenant
 
 | Variable | Default | Description |
 |---|---|---|
-| `GSA_ENABLE_INTERNET_BASELINE` | `false` | Create and link a beta web-category policy |
-| `GSA_BASELINE_POLICY_NAME` | `GSA Lab Baseline Web Filtering` | Deterministic policy name |
-| `GSA_BASELINE_BLOCKED_CATEGORIES` | empty | Required reviewed category names |
-| `GSA_ACKNOWLEDGE_LAB_MODE` | `false` | Required because the built-in baseline is tenant-wide for routed traffic |
+| `GSA_ENABLE_INTERNET_BASELINE` | `false` | Create the gated beta policy/profile/CA chain |
+| `GSA_BASELINE_POLICY_NAME` | `GSA POC Baseline Web Filtering` | Deterministic filtering-policy name |
+| `GSA_BASELINE_BLOCKED_CATEGORIES` | `SocialNetworking` | Reviewed Graph category identifiers; friendly `Social Media` and `Social Networking` aliases are normalized |
+| `GSA_BASELINE_SECURITY_PROFILE_NAME` | `GSA POC Baseline Security Profile` | Deterministic custom security-profile name |
+| `GSA_BASELINE_SECURITY_PROFILE_PRIORITY` | `100` | Custom security-profile priority |
+| `GSA_BASELINE_POLICY_LINK_PRIORITY` | `100` | Filtering-policy priority within the profile |
+| `GSA_BASELINE_CA_POLICY_NAME` | `GSA POC Baseline Internet Access` | Deterministic Conditional Access policy name |
 
-The module resolves the built-in filtering profile by priority `65000`, not by display name. It creates only a reviewed web-category block policy and adds the link if absent. It does not replace existing policies or links.
+The module creates a block policy, links it to a custom enabled security profile, and creates a Conditional Access policy for the **All internet resources with Global Secure Access** application. The CA policy is deliberately `disabled` with empty user, group, and role targets. The profile therefore has no effect until an administrator reviews the policy, adds a pilot assignment, and enables it. The template never links this policy to the built-in tenant-wide baseline.
+
+Managed objects are resolved by deterministic name. Compatible objects are reused. Duplicate names or incompatible actions, rules, categories, priorities, links, assignments, session controls, or CA state stop the run without deleting or rewriting tenant configuration. Category values must use the identifiers shown by the current GSA experience/API, such as `SocialNetworking`; the default blocks social-media sites through that documented category.
 
 Custom Acquire/Bypass and Agentic Acquire rules remain portal/manual because Microsoft does not currently publish a complete validated REST workflow. Threat-intelligence defaults are also manual because Graph and portal examples disagree on `defaultAction`.
 
@@ -430,10 +436,10 @@ At minimum:
 | GSA TLS enable | `status` documented read-only | Manual by default |
 | Intune trusted roots | Primarily Graph beta | Five validated modern types |
 | Android AOSP trusted root | No validated standalone typed resource | Manual |
-| Internet web-category baseline | Graph beta | Explicit tenant-wide lab gate |
+| Internet web-category baseline | Graph beta | Custom profile plus disabled, unassigned CA policy |
 | Custom/Agentic Acquire | Portal workflow | Manual |
 | Threat intelligence baseline | Conflicting documented defaults | Manual |
-| Conditional Access assignment | Potential 60-90 minute propagation | Manual production design |
+| Conditional Access assignment | Graph beta session control; potential 60-90 minute propagation | Policy created disabled with no principals; pilot targeting and enablement require review |
 
 Quick Access supports at most 500 segments, and nested group assignment is not supported. Security-profile and Conditional Access propagation can take 60-90 minutes.
 

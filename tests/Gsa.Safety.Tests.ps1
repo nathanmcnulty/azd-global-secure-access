@@ -98,10 +98,14 @@ Describe 'Tenant scope safety contract' {
         $postProvisionText | Should -Not -Match 'DesiredState\s*=\s*@\{\s*m365\s*=\s*\$false'
     }
 
-    It 'gates beta functionality and tenant-wide baselines' {
+    It 'gates beta functionality and keeps Internet baselines unassigned and disabled' {
         $scriptText | Should -Match 'GSA_ACCEPT_GRAPH_BETA_TERMS'
-        $scriptText | Should -Match 'AcknowledgeTenantWideImpact'
-        $scriptText | Should -Match 'GSA_ACKNOWLEDGE_LAB_MODE'
+        $scriptText | Should -Match "state\s*=\s*'disabled'"
+        $scriptText | Should -Match 'includeUsers\s*=\s*@\(\)'
+        $scriptText | Should -Match 'includeGroups\s*=\s*@\(\)'
+        $scriptText | Should -Match 'globalSecureAccessFilteringProfile'
+        $postProvisionText | Should -Match 'Policy\.ReadWrite\.ConditionalAccess'
+        $scriptText | Should -Not -Match 'priority\s*-eq\s*65000'
     }
 
     It 'never assigns Intune profiles broadly by default' {
