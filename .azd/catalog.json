@@ -1,0 +1,22 @@
+{
+  "title": "Global Secure Access proof of concept",
+  "summary": "Provisions the Azure foundation for a Microsoft Entra Global Secure Access proof of concept with guarded opt-in tenant configuration hooks.",
+  "tags": [
+    "Entra ID",
+    "Global Secure Access",
+    "Key Vault",
+    "Networking",
+    "Bicep"
+  ],
+  "highlights": [
+    "Hardened Premium Key Vault and CRL storage",
+    "Explicit opt-in Microsoft Graph beta operations",
+    "Optional diagnostics, Defender for Key Vault, and private endpoints"
+  ],
+  "featured": true,
+  "solutionCount": 1,
+  "quickstartCommands": [
+    "azd init -t nathanmcnulty/azd-global-secure-access",
+    "azd up"
+  ]
+}

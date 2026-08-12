@@ -691,6 +691,14 @@ Before production use:
 - [Azure Developer CLI template conventions](https://learn.microsoft.com/azure/developer/azure-developer-cli/make-azd-compatible)
 - [Awesome AZD contribution guidance](https://azure.github.io/awesome-azd/docs/contribute/)
 
+## azd website catalog
+
+Repository-owned catalog metadata is stored in [`.azd/catalog.json`](.azd/catalog.json). Update that file when the template title, summary, tags, highlights, featured status, solution count, or quickstart commands change.
+
+Changes to the catalog metadata on `main` trigger the **Publish azd catalog metadata** workflow. The workflow sends an `azd-catalog-updated` repository dispatch to `nathanmcnulty/azd-website` with the source repository, Git ref, and catalog path. It can also be run manually with `workflow_dispatch`.
+
+Maintainers must create the repository Actions secret `AZD_CATALOG_TOKEN` with a fine-grained personal access token that can access `nathanmcnulty/azd-website` and has **Contents: Read and write** permission so it can create repository dispatch events. If the secret is absent, the workflow reports a successful skip instead of failing.
+
 ## License
 
 This project is released under the [Unlicense](LICENSE).
