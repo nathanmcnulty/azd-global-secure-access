@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: publish-azd-catalog-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   notify-catalog:
     runs-on: ubuntu-latest
