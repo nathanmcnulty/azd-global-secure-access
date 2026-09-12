@@ -24,7 +24,7 @@ Install-Module Az.Accounts -Scope CurrentUser
 Install-Module Microsoft.Graph.Authentication -Scope CurrentUser
 ```
 
-Use an administrator who can deploy Azure resources and create role assignments. Optional tenant features require the corresponding Global Secure Access, Application, Intune, or Security administrator role and GSA/Intune licensing. Quick Access and Private Access also require an existing connector group with at least one active connector; this template does not install a connector.
+Use an Azure operator who can deploy resources and create role assignments. Optional tenant features require the corresponding Global Secure Access, Application, Intune, or Security administrator role and GSA/Intune licensing. Some environments already have the required Microsoft Graph permissions consented. If Graph consent has not been completed previously, the deployment may require a **Global Administrator or Privileged Role Administrator**. Quick Access and Private Access also require an existing connector group with at least one active connector; this template does not install a connector.
 
 Review the complete [identity, licensing, permissions, and connector prerequisites](docs/technical-reference.md#prerequisites) before enabling tenant automation.
 
@@ -72,7 +72,7 @@ The Azure layer is Bicep. Tenant and data-plane configuration uses idempotent Po
 | Capability | Default | Additional gate or prerequisite |
 | --- | --- | --- |
 | Azure Key Vault and CRL storage | Enabled | Azure deployment and role-assignment authority |
-| GSA readiness and drift report | Read-only | Required Graph read consent |
+| GSA readiness and drift report | Read-only | Existing Microsoft Graph consent is reused; consent may be required on the first run |
 | Forwarding profile changes | Disabled | Beta acceptance and explicit state per profile |
 | Quick Access or Private Access | Disabled | Active existing connector group and reviewed segments |
 | TLS inspection automation | Disabled | Beta acceptance, Azure PowerShell context, pilot trust plan |

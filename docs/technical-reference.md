@@ -116,6 +116,10 @@ The tenant onboarding action currently documents no supported OAuth permission. 
 
 Readiness uses `NetworkAccess.Read.All`, `NetworkAccessPolicy.Read.All`, and `User.Read`. It requests `Policy.Read.All` only when the Internet baseline is enabled. Connector-group reads still require the documented `Directory.ReadWrite.All` surface. Subscribed SKU inventory is attempted only when the current context already has `LicenseAssignment.Read.All`, `Organization.Read.All`, `Directory.Read.All`, or `Directory.ReadWrite.All`; the advisory check never broadens consent or treats tenant SKU presence as proof of user assignment.
 
+### Graph consent and operation authority
+
+The permissions above are delegated Microsoft Graph permissions for the interactive operator. Consent is separate from the GSA, Application, Intune, Security, and Azure roles that operate the target features. Route Microsoft Graph API consent to a **Global Administrator or Privileged Role Administrator**; do not assume that a feature administrator can consent simply because that role can call the corresponding endpoint. `AppRoleAssignment.ReadWrite.All` is a delegated Graph permission used for the pilot assignment path, not a runtime application permission, and the operator still needs the supported Entra role for the specific assignment. If the required Graph consent is missing, readiness or the selected feature gate stops before tenant mutation.
+
 ### Connector prerequisite
 
 Quick Access and Private Access require an existing connector group with at least one active connector. Connector installation is an external-host operation and cannot be completed by Bicep.
@@ -373,7 +377,7 @@ Provision Azure resources and run the post-provision hook:
 azd provision
 ```
 
-The post-provision hook prompts for delegated Microsoft Graph consent when Graph features are enabled. TLS automation also requires an Az PowerShell context:
+The post-provision hook prompts for delegated Microsoft Graph consent when Graph features are enabled; arrange for the **Global Administrator or Privileged Role Administrator** Graph consent handoff before running it. TLS automation also requires an Az PowerShell context:
 
 ```powershell
 Connect-AzAccount

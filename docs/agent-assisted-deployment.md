@@ -35,7 +35,7 @@ Before a write, verify the signed-in account, Azure tenant and subscription, Mic
 2. Run the Azure preview and GSA readiness report without mutation.
 3. Review unsupported, beta, unknown, reused, and unmanaged findings.
 4. Authorize only the smallest pilot capability needed for the test.
-5. Run `azd up` while the administrator handles normal browser consent.
+5. Have the Graph consent administrator approve the requested Microsoft Graph scopes, then run `azd up` while the feature operator completes normal browser consent and the selected tenant operation.
 6. Compare deployed resources and exact tenant object IDs with the reviewed plan.
 7. Test from a pilot device and record the result before expanding scope.
 8. Generate and review the cleanup plan separately from deployment.
