@@ -1,0 +1,121 @@
+{
+  "schemaVersion": "1.0",
+  "solutionId": "azd-global-secure-access",
+  "status": "implemented",
+  "coverage": "partial",
+  "reviewedOn": "2026-10-02",
+  "requirements": [
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "delegated",
+      "permission": "NetworkAccess.ReadWrite.All",
+      "principal": "deployment-operator",
+      "phase": "deployment",
+      "feature": "core",
+      "defaultEnabled": true,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/technical-reference.md",
+          "sha256": "e51b2397ff3ae513ca03102f315c0742f42c4be8e8ef47da7eb1a80c700c19bf"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "delegated",
+      "permission": "NetworkAccessPolicy.Read.All",
+      "principal": "deployment-operator",
+      "phase": "deployment",
+      "feature": "core",
+      "defaultEnabled": true,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/technical-reference.md",
+          "sha256": "e51b2397ff3ae513ca03102f315c0742f42c4be8e8ef47da7eb1a80c700c19bf"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "delegated",
+      "permission": "Policy.ReadWrite.ConditionalAccess",
+      "principal": "deployment-operator",
+      "phase": "deployment",
+      "feature": "internet-filtering",
+      "defaultEnabled": false,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/technical-reference.md",
+          "sha256": "e51b2397ff3ae513ca03102f315c0742f42c4be8e8ef47da7eb1a80c700c19bf"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "delegated",
+      "permission": "Directory.ReadWrite.All",
+      "principal": "deployment-operator",
+      "phase": "deployment",
+      "feature": "private-access",
+      "defaultEnabled": false,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/technical-reference.md",
+          "sha256": "e51b2397ff3ae513ca03102f315c0742f42c4be8e8ef47da7eb1a80c700c19bf"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "delegated",
+      "permission": "AppRoleAssignment.ReadWrite.All",
+      "principal": "deployment-operator",
+      "phase": "deployment",
+      "feature": "private-access",
+      "defaultEnabled": false,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/technical-reference.md",
+          "sha256": "e51b2397ff3ae513ca03102f315c0742f42c4be8e8ef47da7eb1a80c700c19bf"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "delegated",
+      "permission": "DeviceManagementConfiguration.ReadWrite.All",
+      "principal": "deployment-operator",
+      "phase": "deployment",
+      "feature": "intune-trusted-roots",
+      "defaultEnabled": false,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/technical-reference.md",
+          "sha256": "e51b2397ff3ae513ca03102f315c0742f42c4be8e8ef47da7eb1a80c700c19bf"
+        }
+      ]
+    }
+  ],
+  "gaps": [
+    "Azure RBAC scopes, operator/consent roles, cleanup, and optional connector permissions still need a full review.",
+    "Readiness, forwarding recovery, remote-network inventory, and cleanup scope bundles need separate review."
+  ]
+}
