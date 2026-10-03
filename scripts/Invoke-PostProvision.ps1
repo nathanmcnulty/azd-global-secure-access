@@ -110,12 +110,15 @@ if ($graphNeeded) {
     if ($enableBaseline) {
         $scopes.Add('Policy.ReadWrite.ConditionalAccess')
     }
-    $graphContext = Connect-GsaGraph -Scopes @($scopes | Select-Object -Unique) -Environment $graphEnvironment
-
-    $azureTenantId = Get-GsaEnvironmentValue -Name 'AZURE_TENANT_ID'
-    if ($azureTenantId -and $graphContext.TenantId -ne $azureTenantId) {
-        throw "Graph tenant '$($graphContext.TenantId)' does not match Azure tenant '$azureTenantId'."
+    $azureTenantId = Get-GsaEnvironmentValue -Name 'AZURE_TENANT_ID' -Required
+    $azureSubscriptionId = Get-GsaEnvironmentValue -Name 'AZURE_SUBSCRIPTION_ID' -Required
+    $accountJson = & az account show --subscription $azureSubscriptionId --output json --only-show-errors 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $accountJson) {
+        throw 'The selected Azure CLI subscription could not be verified.'
     }
+    $azureAccount = ($accountJson -join "`n") | ConvertFrom-Json
+    $graphContext = Connect-GsaGraph -Scopes @($scopes | Select-Object -Unique) -Environment $graphEnvironment
+    Assert-GsaTenantBinding -SubscriptionId $azureSubscriptionId -AzureTenantId $azureTenantId -AzureAccount $azureAccount -GraphContext $graphContext
     $results.TenantStatus = Get-GsaTenantStatus
 }
 

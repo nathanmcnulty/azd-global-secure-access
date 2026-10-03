@@ -136,6 +136,26 @@ function Connect-GsaGraph {
     return $context
 }
 
+function Assert-GsaTenantBinding {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SubscriptionId,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$AzureTenantId,
+        [Parameter(Mandatory)][object]$AzureAccount,
+        [Parameter(Mandatory)][object]$GraphContext
+    )
+
+    if ([string]::IsNullOrWhiteSpace($SubscriptionId) -or [string]::IsNullOrWhiteSpace($AzureTenantId)) {
+        throw 'Azure subscription and tenant are required before Graph mutation.'
+    }
+    if ($AzureAccount.id -ne $SubscriptionId -or $AzureAccount.tenantId -ne $AzureTenantId) {
+        throw 'The selected Azure CLI subscription or tenant does not match the azd target.'
+    }
+    if ($GraphContext.TenantId -ne $AzureTenantId) {
+        throw 'The Graph tenant does not match the selected Azure tenant.'
+    }
+}
+
 function Get-GsaGraphEndpoint {
     [CmdletBinding()]
     param(
@@ -454,6 +474,7 @@ function Get-GsaSegmentKey {
 }
 
 Export-ModuleMember -Function @(
+    'Assert-GsaTenantBinding',
     'Assert-GsaPreviewGate',
     'Assert-GsaCloudCapability',
     'Connect-GsaGraph',
