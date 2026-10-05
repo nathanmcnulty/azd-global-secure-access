@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "1.0.0",
+  "repository": "nathanmcnulty/azd-global-secure-access",
+  "sourceRevision": "859d4ca38e456964e297250fdcd3c0f19c7dff21",
+  "capturedAt": "2026-10-04",
+  "items": [
+    {
+      "id": "GSA-001",
+      "title": "Reconcile this backlog with current source and active work",
+      "kind": "discovery",
+      "priority": "P1",
+      "status": "done",
+      "wave": 0,
+      "problem": "Plans and implementation evidence are spread across files; the captured source can change while other tasks work.",
+      "scope": [
+        "docs/backlog.json",
+        "docs/backlog.md",
+        "Existing roadmap, execution status, open issues and pull requests (read-only)"
+      ],
+      "acceptance": [
+        "Classify each candidate as implemented, still open, superseded or awaiting evidence; retain source links and reasons.",
+        "Inspect dirty state, remotes, worktrees and local environment presence without reading secrets; avoid duplicate work with active owners.",
+        "Resolve the actual offline validation commands and record exact current default-branch/working-tree provenance; do not copy historical live passes to newer code."
+      ],
+      "validation": [
+        "git status --short",
+        "git remote -v",
+        "git worktree list --porcelain",
+        "Read the applicable instructions and validation workflow; read gh issue list and gh pr list for the named repository using nathanmcnulty. Do not create or modify issues/PRs."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "README.md"
+      ],
+      "evidence": [
+        "2026-10-04 read-only reconciliation against current main 859d4ca38e456964e297250fdcd3c0f19c7dff21: inspected canonical dirty state, remotes, worktrees and environment-path presence without reading values; active/unowned branches remain untouched. Reviewed current issue/PR inventory, roadmap/TODO task sources and .github/workflows/validate.yml; kept live and optional-feature gates proposed.",
+        "Invoke-Pester ./tests -CI: 113/113 passed, including missing/mismatched Azure tenant binding cases. Validation used offline fixtures only; no cloud, tenant, recipient or endpoint action was performed."
+      ],
+      "blocker": null,
+      "claim": null
+    },
+    {
+      "id": "GSA-002",
+      "title": "Qualify the read-only readiness and exact-feature pilot",
+      "kind": "verification",
+      "priority": "P1",
+      "status": "proposed",
+      "wave": 2,
+      "problem": "Licensing, connectors, cloud support and Graph beta mutations remain feature-specific gates.",
+      "scope": [
+        "docs/technical-reference.md",
+        "scripts/",
+        "tests/"
+      ],
+      "acceptance": [
+        "Record readiness, connector health and stale-plan rejection before authorizing one named feature.",
+        "Test exact-ID rollback and reused-object preservation for that feature.",
+        "TLS, forwarding, remote networks, CA and Intune assignments remain independent approvals with no broadened scope."
+      ],
+      "validation": [
+        "Use the offline commands in the registered validation workflow; record the exact commands, revision and results before implementation is complete.",
+        "Run focused tests for changed behavior from tests/; fixtures do not prove live-service or endpoint behavior.",
+        "After separate authorization, retain redacted exact-target live evidence and cleanup results outside public Git. Do not execute live operations from this backlog alone."
+      ],
+      "dependencies": [],
+      "authorization": "tenant-write",
+      "components": [],
+      "sources": [
+        "AGENTS.md",
+        "docs/technical-reference.md"
+      ],
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "GSA-003",
+      "title": "Evaluate shared auth/validation and CRL health reporting",
+      "kind": "discovery",
+      "priority": "P2",
+      "status": "proposed",
+      "wave": 2,
+      "problem": "Graph session reuse and optional TLS/CRL state can be represented consistently without sharing policy mutation logic.",
+      "scope": [
+        "scripts/",
+        "infra/",
+        "docs/",
+        "azd-components.lock.json"
+      ],
+      "acceptance": [
+        "Compare delegated Graph coordinator only with a compatible Microsoft.Graph.Authentication session; do not replace unrelated Azure CLI flows.",
+        "Report exact target/licensing/connector and optional CRL expiry status using bounded validation.",
+        "TLS renewal or central alert sending is never executed by a read-only health check."
+      ],
+      "validation": [
+        "Use the offline commands in the registered validation workflow; record the exact commands, revision and results before implementation is complete.",
+        "Run focused tests for changed behavior from tests/; fixtures do not prove live-service or endpoint behavior."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [
+        "graph-delegated-authentication",
+        "deployment-validation",
+        "azure-monitor-scheduled-query-notifications"
+      ],
+      "sources": [
+        "README.md"
+      ],
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "GSA-004",
+      "title": "Fail closed on missing Azure tenant before cached Graph mutation",
+      "kind": "discovery",
+      "priority": "P1",
+      "status": "done",
+      "wave": 0,
+      "problem": "Open report captured 2026-10-03 during execution reconciliation. Another code-quality task may own an active fix; inspect its PR and current source before dispatch.",
+      "scope": [
+        "Linked issue and current source (read-only)",
+        "Repository-local backlog evidence"
+      ],
+      "acceptance": [
+        "Read the linked issue and current default branch; classify the exact defect, current owner and evidence gap.",
+        "Record a current PR or verified resolution before selecting any implementation; preserve broader feature and live acceptance gates."
+      ],
+      "validation": [
+        "Read current issue and PR state using nathanmcnulty; do not modify or close issues during reconciliation.",
+        "Inspect dirty state and worktrees; resolve the exact current revision and relevant offline commands before implementation."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "https://github.com/nathanmcnulty/azd-global-secure-access/issues/14"
+      ],
+      "evidence": [
+        "Source implementation is present in current main 859d4ca38e456964e297250fdcd3c0f19c7dff21; resolved revision 859d4ca38e456964e297250fdcd3c0f19c7dff21 via merged https://github.com/nathanmcnulty/azd-global-secure-access/pull/15.",
+        "Invoke-Pester ./tests -CI: 113/113 passed, including missing/mismatched Azure tenant binding cases. This completes only the bounded source/fixture acceptance; live-service, recovery, release and endpoint gates remain separate."
+      ],
+      "blocker": null,
+      "claim": null
+    }
+  ]
+}
