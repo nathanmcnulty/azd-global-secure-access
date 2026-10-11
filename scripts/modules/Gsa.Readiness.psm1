@@ -178,25 +178,63 @@ function Test-GsaCrlReadiness {
         [DateTimeOffset]$Now = [DateTimeOffset]::UtcNow
     )
 
-    $nextUpdate = if ($CrlState.nextUpdate) { [DateTimeOffset]::Parse([string]$CrlState.nextUpdate) } else { $null }
-    if (-not $CrlState.published) {
-        return ConvertTo-GsaReadinessCheck -Name 'CRL publication' -Status 'Fail' -Classification 'missing' `
-            -Detail 'The configured CRL could not be retrieved.' -Expected 'Published and unexpired CRL' -Actual $CrlState
+    # Project only closed evidence; never serialize the supplied CRL/provider DTO.
+    $publishedProperty = $CrlState.PSObject.Properties['published']
+    $published = $null -ne $publishedProperty -and $publishedProperty.Value -is [bool] -and $publishedProperty.Value
+    $hashes = @{}
+    foreach ($name in @('expectedSha256', 'actualSha256')) {
+        $property = $CrlState.PSObject.Properties[$name]
+        $hashes[$name] = if ($null -ne $property -and $property.Value -is [string] -and $property.Value -cmatch '\A[a-fA-F0-9]{64}\z') {
+            $property.Value.ToUpperInvariant()
+        } else { $null }
     }
-    if (-not $nextUpdate) {
-        return ConvertTo-GsaReadinessCheck -Name 'CRL publication' -Status 'Warning' -Classification 'unknownTransitional' `
-            -Detail 'The CRL is published, but nextUpdate is not recorded in committed state.' -Expected 'Published and unexpired CRL' -Actual $CrlState
+    $hashMatches = $null -ne $hashes.expectedSha256 -and $null -ne $hashes.actualSha256 -and $hashes.expectedSha256 -ceq $hashes.actualSha256
+    $dateProperty = $CrlState.PSObject.Properties['nextUpdate']
+    $committedDate = [DateTimeOffset]::MinValue
+    $datePresent = $null -ne $dateProperty -and $null -ne $dateProperty.Value -and $dateProperty.Value -cne ''
+    $dateValid = $datePresent -and $dateProperty.Value -is [string] -and $dateProperty.Value.Length -le 40 -and
+        $dateProperty.Value -cmatch '\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})\z' -and
+        [DateTimeOffset]::TryParse($dateProperty.Value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$committedDate)
+    $actual = [ordered]@{
+        published = [bool]$published
+        expectedSha256 = $hashes.expectedSha256
+        actualSha256 = $hashes.actualSha256
+        hashMatches = [bool]$hashMatches
+        publicationVerified = [bool]($published -and $hashMatches)
+        # Retain the legacy field as an explicitly labelled committed-date alias.
+        nextUpdate = if ($dateValid) { $committedDate.ToUniversalTime().ToString('O') } else { $null }
+        nextUpdateSource = 'committedState'
+        observedNextUpdate = $null
+        expiryObserved = $false
+        failureCode = 'ObservedExpiryUnknown'
     }
-    if ($nextUpdate -le $Now) {
-        return ConvertTo-GsaReadinessCheck -Name 'CRL publication' -Status 'Fail' -Classification 'changed' `
-            -Detail 'The published CRL is expired.' -Expected 'Published and unexpired CRL' -Actual $CrlState
+    $status = 'Warning'
+    $classification = 'unknownTransitional'
+    $detail = 'Published bytes match committed SHA-256. The recorded expiry is advisory; expiry and issuer trust were not observed from CRL bytes.'
+    if (-not $published) {
+        $status = 'Fail'; $classification = 'missing'; $actual.failureCode = 'PublicationUnavailable'
+        $detail = 'The configured CRL publication could not be observed as HTTP 200 with CRL content type.'
+    } elseif ($null -eq $hashes.expectedSha256 -or $null -eq $hashes.actualSha256) {
+        $status = 'Fail'; $classification = 'unknownTransitional'; $actual.failureCode = 'HashEvidenceInvalid'
+        $detail = 'Valid committed and observed SHA-256 fingerprints are required to verify publication.'
+    } elseif (-not $hashMatches) {
+        $status = 'Fail'; $classification = 'changed'; $actual.failureCode = 'HashMismatch'
+        $detail = 'The published CRL bytes do not match the committed SHA-256 fingerprint.'
+    } elseif (-not $datePresent) {
+        $actual.failureCode = 'CommittedExpiryMissing'
+        $detail = 'Published bytes match committed SHA-256, but no expiry is recorded in committed state.'
+    } elseif (-not $dateValid) {
+        $actual.failureCode = 'CommittedExpiryInvalid'
+        $detail = 'Published bytes match committed SHA-256, but the recorded expiry is invalid.'
+    } elseif ($committedDate -le $Now) {
+        $status = 'Fail'; $classification = 'changed'; $actual.failureCode = 'CommittedExpiryExpired'
+        $detail = 'The committed CRL expiry date has passed; expiry was not observed from CRL bytes.'
+    } elseif ($committedDate -le $Now.AddDays(7)) {
+        $classification = 'changed'; $actual.failureCode = 'CommittedExpiryNear'
+        $detail = 'The committed CRL expiry date is within seven days; expiry was not observed from CRL bytes.'
     }
-    if ($nextUpdate -le $Now.AddDays(7)) {
-        return ConvertTo-GsaReadinessCheck -Name 'CRL publication' -Status 'Warning' -Classification 'changed' `
-            -Detail 'The published CRL expires within seven days.' -Expected 'More than seven days remaining' -Actual $CrlState
-    }
-    return ConvertTo-GsaReadinessCheck -Name 'CRL publication' -Status 'Pass' -Classification 'managed' `
-        -Detail "The CRL is published and valid through $($nextUpdate.ToString('O'))." -Expected 'Published and unexpired CRL' -Actual $CrlState
+    return ConvertTo-GsaReadinessCheck -Name 'CRL publication' -Status $status -Classification $classification `
+        -Detail $detail -Expected 'Exact published bytes and separately qualified committed expiry' -Actual ([pscustomobject]$actual)
 }
 
 function Test-GsaMicrosoftTrafficRule {

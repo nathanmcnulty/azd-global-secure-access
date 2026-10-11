@@ -55,10 +55,14 @@ Describe 'GSA readiness response contracts' {
         $expired = Test-GsaCrlReadiness -CrlState ([pscustomobject]@{
             published = $true
             nextUpdate = '2026-08-10T00:00:00Z'
+            expectedSha256 = 'A' * 64
+            actualSha256 = 'A' * 64
         }) -Now ([DateTimeOffset]'2026-08-11T00:00:00Z')
         $near = Test-GsaCrlReadiness -CrlState ([pscustomobject]@{
             published = $true
             nextUpdate = '2026-08-15T00:00:00Z'
+            expectedSha256 = 'A' * 64
+            actualSha256 = 'A' * 64
         }) -Now ([DateTimeOffset]'2026-08-11T00:00:00Z')
 
         $expired.Status | Should -Be 'Fail'
