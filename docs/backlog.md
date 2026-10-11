@@ -214,7 +214,7 @@ Graph session reuse and optional TLS/CRL state can be represented consistently w
 
 **Evidence:**
 
-- _none_
+- Partial CRL correctness/privacy improvement&colon; publication verification derives from validated committed and downloaded SHA-256 fingerprints, ignoring caller hashMatches. CRL DTOs omit URL/provider errors/unknown fields. Legacy nextUpdate remains normalized committed metadata with nextUpdateSource=committedState; observedNextUpdate is null and expiryObserved=false. Recorded expired/near dates retain Fail/Warning; future recorded dates remain advisory Warning, not observed-expiry Pass. Other readiness DTOs and ready=no-Fail semantics, public HTTP CDP, renewal/auth/infra/defaults remain unchanged. A minimal adjacent array normalization preserves empty Internet-baseline results so readiness reaches the CRL check. PowerShell 7.6.6 full141 tests/28 new cases, analyzer Error+Warning, parse/Bicep/package/local azd-load gates pass; no live readiness/renewal/grant/alert execution. GSA-003 remains proposed&colon; full auth comparison/target licensing connector validation and transport bounds are not closed.
 
 **Review and authorization note:**
 

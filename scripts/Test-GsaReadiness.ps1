@@ -114,7 +114,7 @@ if ($remoteNetworkPlanPath) {
         -Detail 'No captured remote-network plan is configured. Remote-network, device-link, association, health, CPE, and Adaptive Access readiness remain unverified.' `
         -Expected 'Optional GSA_REMOTE_NETWORK_PLAN_PATH' -Actual $null)
 }
-$manifestBaselineResources = if ($manifest) {
+$manifestBaselineResources = @(if ($manifest) {
     @($manifest.resources | Where-Object kind -in @(
         'Microsoft.Graph/networkAccess/filteringPolicy',
         'Microsoft.Graph/networkAccess/filteringProfile',
@@ -122,7 +122,7 @@ $manifestBaselineResources = if ($manifest) {
     ))
 } else {
     @()
-}
+})
 $manifestHasInternetBaseline = $manifestBaselineResources.Count -gt 0
 
 if (-not $capability.GraphCoreRead) {
@@ -357,7 +357,6 @@ if ($manifest) {
     $crlResource = @($manifest.resources | Where-Object kind -eq 'Microsoft.Storage/crl') | Select-Object -First 1
     if ($crlResource) {
         $crlState = [ordered]@{
-            url        = $crlResource.id
             published  = $false
             nextUpdate = $crlResource.observedState.NextUpdate
             expectedSha256 = $crlResource.observedState.Sha256
@@ -371,15 +370,15 @@ if ($manifest) {
             $crlState.actualSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($content))
             $crlState.hashMatches = $crlState.actualSha256 -eq $crlState.expectedSha256
         } catch {
-            $crlState['error'] = $_.Exception.Message
+            # The closed result records unavailable publication without provider text.
+            $crlState.published = $false
         }
-        if ($crlState.published -and -not $crlState.hashMatches) {
-            Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'CRL publication' -Status 'Fail' -Classification 'changed' `
-                -Detail 'The published CRL bytes do not match the committed SHA-256 fingerprint.' `
-                -Expected $crlState.expectedSha256 -Actual $crlState.actualSha256 -ResourceKey $crlResource.key -Ownership $crlResource.ownership)
-        } else {
-            Add-GsaCheck (Test-GsaCrlReadiness -CrlState ([pscustomobject]$crlState))
+        $crlCheck = Test-GsaCrlReadiness -CrlState ([pscustomobject]$crlState)
+        if ($crlCheck.actual.failureCode -eq 'HashMismatch') {
+            $crlCheck.resourceKey = $crlResource.key
+            $crlCheck.ownership = $crlResource.ownership
         }
+        Add-GsaCheck $crlCheck
     }
 }
 

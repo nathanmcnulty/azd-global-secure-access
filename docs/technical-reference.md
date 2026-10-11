@@ -706,3 +706,25 @@ Maintainers must create the repository Actions secret `AZD_CATALOG_TOKEN` with a
 ## License
 
 This project is released under the [Unlicense](../LICENSE).
+
+### CRL evidence boundaries
+
+The CRL check verifies publication only when the downloaded bytes have the exact
+validated SHA-256 fingerprint recorded in committed state. Its closed result
+omits the CRL URL, provider errors and unknown fields. It does not decode CRL
+expiry or verify issuer trust. The legacy `actual.nextUpdate` field remains a
+normalized committed-date value, labelled `nextUpdateSource: committedState`;
+`observedNextUpdate` is null and `expiryObserved` is false.
+
+Recorded expired dates still fail, and dates within seven days warn. A future
+recorded date now warns rather than claiming observed validity. Missing or
+invalid recorded dates are advisory warnings after a byte match; unavailable
+publication, invalid fingerprint evidence and mismatched bytes fail. `ready`
+continues to mean that no check failed; it does not turn warnings into verified
+expiry, licensing, connector or endpoint readiness.
+
+This is partial GSA-003 work. Other readiness DTOs retain their existing contracts
+and may contain provider details; this change does not anonymize the full report.
+The existing public HTTP CDP and retrieval behavior remain unchanged. The CRL
+check never renews certificates, writes tenant state or sends alerts. Offline
+fixtures prove these selected code paths, not live publication or issuer trust.
