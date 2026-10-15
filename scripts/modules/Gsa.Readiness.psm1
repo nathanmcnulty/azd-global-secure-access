@@ -237,6 +237,94 @@ function Test-GsaCrlReadiness {
         -Detail $detail -Expected 'Exact published bytes and separately qualified committed expiry' -Actual ([pscustomobject]$actual)
 }
 
+function Get-GsaBoundedCrlEvidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string] $Uri,
+        [ValidateRange(1, 1048576)][int] $MaximumBytes = 1048576,
+        [ValidateScript({ $_ -gt [TimeSpan]::Zero -and $_ -le [TimeSpan]::FromSeconds(15) })]
+        [TimeSpan] $TotalTimeout = ([TimeSpan]::FromSeconds(15))
+    )
+
+    $closed = [pscustomobject][ordered]@{
+        published    = $false
+        actualSha256 = $null
+    }
+    $parsedUri = $null
+    if (-not [Uri]::TryCreate($Uri, [UriKind]::Absolute, [ref]$parsedUri) -or
+        $parsedUri.Scheme -notin @('http', 'https') -or -not $parsedUri.Host -or
+        $parsedUri.UserInfo -or $parsedUri.Fragment) {
+        return $closed
+    }
+
+    $handler = $null
+    $client = $null
+    $request = $null
+    $response = $null
+    $stream = $null
+    $buffered = $null
+    $deadline = $null
+    try {
+        $handler = [Net.Http.HttpClientHandler]::new()
+        $handler.AllowAutoRedirect = $false
+        $handler.UseProxy = $false
+        $handler.UseCookies = $false
+        $handler.UseDefaultCredentials = $false
+        $handler.Credentials = $null
+        $handler.DefaultProxyCredentials = $null
+        $handler.PreAuthenticate = $false
+
+        $client = [Net.Http.HttpClient]::new($handler, $true)
+        $client.Timeout = [Threading.Timeout]::InfiniteTimeSpan
+        $deadline = [Threading.CancellationTokenSource]::new($TotalTimeout)
+        $request = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Get, $parsedUri)
+        $request.Headers.Accept.Add([Net.Http.Headers.MediaTypeWithQualityHeaderValue]::new('application/pkix-crl'))
+        $response = $client.SendAsync(
+            $request,
+            [Net.Http.HttpCompletionOption]::ResponseHeadersRead,
+            $deadline.Token
+        ).GetAwaiter().GetResult()
+
+        $contentType = $response.Content.Headers.ContentType
+        $contentLength = $response.Content.Headers.ContentLength
+        if ($response.StatusCode -ne [Net.HttpStatusCode]::OK -or
+            $null -eq $contentType -or $contentType.MediaType -ine 'application/pkix-crl' -or
+            $contentType.Parameters.Count -ne 0 -or
+            ($null -ne $contentLength -and ($contentLength -le 0 -or $contentLength -gt $MaximumBytes))) {
+            return $closed
+        }
+
+        $stream = $response.Content.ReadAsStreamAsync($deadline.Token).GetAwaiter().GetResult()
+        $buffered = [IO.MemoryStream]::new()
+        $buffer = [byte[]]::new(8192)
+        $total = 0
+        while (($read = $stream.ReadAsync($buffer, 0, $buffer.Length, $deadline.Token).GetAwaiter().GetResult()) -gt 0) {
+            if ($total + $read -gt $MaximumBytes) { return $closed }
+            $buffered.Write($buffer, 0, $read)
+            $total += $read
+        }
+        if ($total -eq 0 -or ($null -ne $contentLength -and $total -ne $contentLength)) { return $closed }
+
+        $bytes = $buffered.ToArray()
+        return [pscustomobject][ordered]@{
+            published    = $true
+            actualSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+        }
+    }
+    catch {
+        return $closed
+    }
+    finally {
+        if ($buffered) { $buffered.Dispose() }
+        if ($stream) { $stream.Dispose() }
+        if ($response) { $response.Dispose() }
+        if ($request) { $request.Dispose() }
+        if ($deadline) { $deadline.Dispose() }
+        if ($client) { $client.Dispose() }
+        elseif ($handler) { $handler.Dispose() }
+    }
+}
+
 function Test-GsaMicrosoftTrafficRule {
     [CmdletBinding()]
     param(
@@ -307,6 +395,7 @@ Export-ModuleMember -Function @(
     'Test-GsaCertificateReadiness',
     'Test-GsaConnectorReadiness',
     'Test-GsaCrlReadiness',
+    'Get-GsaBoundedCrlEvidence',
     'Test-GsaDeployment',
     'Test-GsaDirectoryRoleIndicator',
     'Test-GsaLicenseIndicator',

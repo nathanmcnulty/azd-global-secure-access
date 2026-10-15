@@ -363,16 +363,10 @@ if ($manifest) {
             actualSha256 = $null
             hashMatches = $false
         }
-        try {
-            $response = Invoke-WebRequest -Uri $crlResource.id -TimeoutSec 15
-            [byte[]]$content = $response.Content
-            $crlState.published = $response.StatusCode -eq 200 -and [string]$response.Headers['Content-Type'] -match '^application/pkix-crl'
-            $crlState.actualSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($content))
-            $crlState.hashMatches = $crlState.actualSha256 -eq $crlState.expectedSha256
-        } catch {
-            # The closed result records unavailable publication without provider text.
-            $crlState.published = $false
-        }
+        $crlEvidence = Get-GsaBoundedCrlEvidence -Uri ([string]$crlResource.id)
+        $crlState.published = $crlEvidence.published
+        $crlState.actualSha256 = $crlEvidence.actualSha256
+        $crlState.hashMatches = $crlState.actualSha256 -eq $crlState.expectedSha256
         $crlCheck = Test-GsaCrlReadiness -CrlState ([pscustomobject]$crlState)
         if ($crlCheck.actual.failureCode -eq 'HashMismatch') {
             $crlCheck.resourceKey = $crlResource.key
