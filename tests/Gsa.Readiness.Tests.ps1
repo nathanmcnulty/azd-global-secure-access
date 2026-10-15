@@ -9,6 +9,51 @@ BeforeAll {
 }
 
 Describe 'GSA readiness response contracts' {
+    It 'reports an empty <parameter> collection without treating it as success' -ForEach @(
+        @{ command='Test-GsaLicenseIndicator'; parameter='SubscribedSkus'; status='Warning'; classification='unknownTransitional' },
+        @{ command='Test-GsaDirectoryRoleIndicator'; parameter='Memberships'; status='Warning'; classification='unknownTransitional' },
+        @{ command='Test-GsaConnectorReadiness'; parameter='Connectors'; status='Fail'; classification='missing' },
+        @{ command='Test-GsaCertificateReadiness'; parameter='Certificates'; status='Fail'; classification='missing' },
+        @{ command='Test-GsaMicrosoftTrafficRule'; parameter='Policies'; status='Warning'; classification='missing' },
+        @{ command='Test-GsaDeployment'; parameter='Deployments'; status='Warning'; classification='missing' }
+    ) {
+        $arguments = @{ $parameter = @() }
+        $checks = @(& $command @arguments)
+        $checks.Count | Should -Be 1
+        $checks[0].Status | Should -Be $status
+        $checks[0].Classification | Should -Be $classification
+        ($checks | ConvertTo-Json -Depth 10 | ConvertFrom-Json)[0].Status | Should -Be $status
+    }
+
+    It 'continues to reject null <parameter> observations' -ForEach @(
+        @{ command='Test-GsaLicenseIndicator'; parameter='SubscribedSkus' },
+        @{ command='Test-GsaDirectoryRoleIndicator'; parameter='Memberships' },
+        @{ command='Test-GsaConnectorReadiness'; parameter='Connectors' },
+        @{ command='Test-GsaCertificateReadiness'; parameter='Certificates' },
+        @{ command='Test-GsaMicrosoftTrafficRule'; parameter='Policies' },
+        @{ command='Test-GsaDeployment'; parameter='Deployments' }
+    ) {
+        $arguments = @{ $parameter = $null }
+        { & $command @arguments } | Should -Throw
+    }
+
+    It 'completes the actual readiness report when supported API collections are empty' {
+        $root = Split-Path $PSScriptRoot -Parent
+        $fixture = Join-Path $PSScriptRoot 'helpers/Invoke-GsaEmptyReadinessFixture.ps1'
+        $nativeOutput = & (Get-Process -Id $PID).Path -NoProfile -File $fixture -Root $root -ScratchPath $TestDrive 2>&1
+        $LASTEXITCODE | Should -Be 1
+        $report = ($nativeOutput | Out-String) | ConvertFrom-Json -Depth 30
+        $report.ready | Should -BeFalse
+        foreach ($name in @('License indicators', 'Directory role', 'Private Access connector group', 'TLS certificate readiness', 'Microsoft traffic rules', 'Deployment logs')) {
+            $check = @($report.checks | Where-Object name -eq $name)
+            $check.Count | Should -Be 1
+            $check[0].Status | Should -Not -Be 'Pass'
+        }
+        ($report.checks | Where-Object name -eq 'Private Access connector group').Actual.connectorCount | Should -Be 0
+        ($report.checks | Where-Object name -eq 'TLS certificate readiness').Status | Should -Be 'Fail'
+        @($report.checks | Where-Object name -eq 'Deployment logs').Count | Should -Be 1
+    }
+
     It 'distinguishes an uncommitted operation from a stale marker for a committed operation' {
         $pending = [pscustomobject]@{
             operationId = 'operation-id'
