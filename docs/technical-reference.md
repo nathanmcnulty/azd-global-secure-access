@@ -418,7 +418,7 @@ The command emits human-readable status lines and returns structured JSON. Use `
 
 Optional observability and client inputs extend the same report without changing Azure, Microsoft Entra, Intune, endpoints, routers, VPNs, DNS/NRPT, QUIC, Hyper-V, WSL, proxy, or Defender configuration. An Intune client or trusted-root assignment is configuration evidence only; it is not proof of installation, root acquisition, forwarding, traffic acquisition, or healthy client operation. Unknown fields and enum values remain evidence and are classified as transitional rather than coerced to healthy.
 
-Classifications are `managed`, `reused`, `missing`, `changed`, `unmanagedConflict`, `unsupported`, and `unknownTransitional`. The report:
+Classifications are `managed`, `reused`, `missing`, `changed`, `unmanagedConflict`, `unsupported`, and `unknownTransitional`. Successful empty API collections remain reportable observations: no license or directory-role indicators produce advisory warnings; no active connectors or no certificates for requested/committed TLS inspection produce failures. Empty Microsoft traffic rules or deployment history produce missing-evidence warnings, never a deployment-success claim. Null or malformed API responses remain errors, not empty successful observations. The report:
 
 - validates the Azure/Graph cloud and endpoint contract and tenant consistency;
 - confirms required Graph scopes and reports observable supported directory roles;
