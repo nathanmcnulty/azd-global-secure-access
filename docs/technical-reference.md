@@ -429,7 +429,7 @@ Classifications are `managed`, `reused`, `missing`, `changed`, `unmanagedConflic
 - reports failed, pending, and unknown deployment stages with error messages;
 - inventories Adaptive Access/Conditional Access signaling without changing it;
 - checks Graph TLS certificate status and 90-day expiry;
-- retrieves the committed CRL through an anonymous, no-redirect streaming request with a 15-second total deadline and 1 MiB byte limit, verifies its exact SHA-256 fingerprint only after a complete HTTP 200 `application/pkix-crl` body, and reports seven-day/expired thresholds;
+- retrieves the committed CRL through an anonymous, no-redirect streaming request with a 15-second total deadline and 1 MiB byte limit, structurally decodes the complete DER body, verifies its exact SHA-256 fingerprint, and reports observed `thisUpdate`/`nextUpdate` thresholds;
 - compares committed object IDs and desired fingerprints through GET-only Graph calls;
 - verifies the managed Internet policy chain whenever it is enabled for execution or recorded in committed state.
 
@@ -751,18 +751,25 @@ or runtime component.
 ### CRL evidence boundaries
 
 The CRL check verifies publication only when the downloaded bytes have the exact
-validated SHA-256 fingerprint recorded in committed state. Its closed result
-omits the CRL URL, provider errors and unknown fields. It does not decode CRL
-expiry or verify issuer trust. The legacy `actual.nextUpdate` field remains a
-normalized committed-date value, labelled `nextUpdateSource: committedState`;
-`observedNextUpdate` is null and `expiryObserved` is false.
+validated SHA-256 fingerprint recorded in committed state. After the bounded
+download completes, .NET's CRL decoder validates the complete DER structure and
+`AsnReader` extracts the RFC 5280 `thisUpdate` and `nextUpdate` fields. Malformed,
+trailing, or incomplete DER fails closed without a hash or date observation.
+The closed result omits the CRL URL, provider errors, DER bytes, and unknown
+fields.
 
-Recorded expired dates still fail, and dates within seven days warn. A future
-recorded date now warns rather than claiming observed validity. Missing or
-invalid recorded dates are advisory warnings after a byte match; unavailable
-publication, invalid fingerprint evidence and mismatched bytes fail. `ready`
-continues to mean that no check failed; it does not turn warnings into verified
-expiry, licensing, connector or endpoint readiness.
+The legacy `actual.nextUpdate` field remains a normalized committed-date value,
+labelled `nextUpdateSource: committedState`. `observedThisUpdate` and
+`observedNextUpdate` come only from the bounded downloaded DER. Observed missing,
+inverted, future-effective, or expired dates fail; an observed `nextUpdate`
+within seven days warns. A current observed interval also remains a warning
+because this read-only check does not verify the CRL signature or issuer;
+`signatureVerified` and `issuerVerified` are explicitly false. Committed dates
+remain advisory and cannot mask an observed expired CRL. Legacy callers without
+bounded DER evidence retain the committed-date warning behavior.
+
+`ready` continues to mean that no check failed; it does not turn warnings into
+verified signature, issuer, licensing, connector, or endpoint readiness.
 
 This is partial GSA-003 work. Other readiness DTOs retain their existing contracts
 and may contain provider details; this change does not anonymize the full report.
@@ -773,7 +780,7 @@ applies one 15-second deadline to headers and the complete streamed body. Hosts
 that require an outbound proxy fail closed rather than forwarding the CRL request
 or proxy credentials. Responses over 1 MiB, empty or truncated
 bodies, non-200 status, and non-`application/pkix-crl` media types fail closed.
-Only completed bounded bytes are hashed; failures retain the existing closed DTO
-without URL or provider error details. The CRL check never renews certificates,
+Only completed, structurally decoded bounded bytes are hashed; failures retain a
+closed DTO without URL or provider error details. The CRL check never renews certificates,
 writes tenant state or sends alerts. Offline loopback fixtures prove these selected
 transport paths, not live publication or issuer trust.
