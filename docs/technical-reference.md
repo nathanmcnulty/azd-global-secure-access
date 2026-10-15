@@ -76,7 +76,7 @@ The design separates:
 
 - [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
-- PowerShell 7.4 or later
+- PowerShell 7.6 or later
 - [Bicep](https://learn.microsoft.com/azure/azure-resource-manager/bicep/install), available through Azure CLI
 - `Az.Accounts` for TLS/CRL operations
 - `Microsoft.Graph.Authentication` for Graph operations
@@ -706,6 +706,32 @@ Maintainers must create the repository Actions secret `AZD_CATALOG_TOKEN` with a
 ## License
 
 This project is released under the [Unlicense](../LICENSE).
+
+### Graph collection pagination boundaries
+
+Every Graph collection read binds its initial location and every continuation to
+the HTTPS origin selected by the current `Get-MgContext` environment. Missing or
+unknown session environments fail before dispatch. Relative locations must start
+with one slash; absolute locations must use the selected cloud host and default
+HTTPS port. User information, fragments, control characters, backslashes,
+scheme-relative locations, foreign origins and changed collection paths are
+rejected. The exact accepted location and caller headers are passed to the Graph
+SDK unchanged.
+
+Collection reads buffer the complete result and fail without returning partial
+items when a response is not a collection, a continuation is malformed, a page
+repeats, or the default 100-page or 10,000-item bound would be exceeded. Callers
+can lower those bounds or raise them only to the declared 1,000-page and
+100,000-item maxima. These controls do not bound Graph SDK retry time, response
+body size or total wall time, and offline SDK-boundary fixtures do not prove a
+live cloud response.
+
+The delegated-authentication comparison is pinned to `azd-reference` revision
+`d4d2fee7440b2dc700d2e7898cc0c932b9300314`. Its component requires an explicit
+tenant, expected account, probe URI and opt-in interaction/context replacement.
+This solution does not yet supply all of those inputs, so adoption remains
+separate work. This pagination change adds no login, consent, scope, dependency
+or runtime component.
 
 ### CRL evidence boundaries
 

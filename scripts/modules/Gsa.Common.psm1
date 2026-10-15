@@ -314,15 +314,86 @@ function Get-GsaGraphCollection {
     param(
         [Parameter(Mandatory)]
         [string]$Uri,
-        [hashtable]$Headers
+        [hashtable]$Headers,
+        [ValidateRange(1, 1000)]
+        [int]$MaximumPages = 100,
+        [ValidateRange(1, 100000)]
+        [int]$MaximumItems = 10000
     )
 
+    $validationError = 'Graph collection pagination validation failed.'
+    try {
+        $context = Get-MgContext -ErrorAction Stop
+    } catch {
+        throw $validationError
+    }
+
+    $environment = if ($context -and $context.PSObject.Properties['Environment']) {
+        [string]$context.Environment
+    } else {
+        ''
+    }
+    if ($environment -notin @('Global', 'USGov', 'USGovDoD', 'China')) {
+        throw $validationError
+    }
+
+    $graphEndpoint = [uri](Get-GsaGraphEndpoint -Environment $environment)
+    $resolvePageUri = {
+        param(
+            [string]$Candidate,
+            [string]$ExpectedPath
+        )
+
+        if ([string]::IsNullOrWhiteSpace($Candidate) -or
+            $Candidate.StartsWith('//', [System.StringComparison]::Ordinal) -or
+            $Candidate.Contains('\')) {
+            throw $validationError
+        }
+        foreach ($character in $Candidate.ToCharArray()) {
+            if ([char]::IsControl($character)) {
+                throw $validationError
+            }
+        }
+
+        $absoluteUri = $null
+        if ($Candidate.StartsWith('/', [System.StringComparison]::Ordinal)) {
+            if (-not [uri]::TryCreate($graphEndpoint, $Candidate, [ref]$absoluteUri)) {
+                throw $validationError
+            }
+        } elseif (-not [uri]::TryCreate($Candidate, [System.UriKind]::Absolute, [ref]$absoluteUri)) {
+            throw $validationError
+        }
+
+        if ($absoluteUri.Scheme -ne 'https' -or
+            -not [string]::IsNullOrEmpty($absoluteUri.UserInfo) -or
+            -not [string]::IsNullOrEmpty($absoluteUri.Fragment) -or
+            $absoluteUri.Port -ne 443 -or
+            -not [string]::Equals($absoluteUri.DnsSafeHost, $graphEndpoint.DnsSafeHost, [System.StringComparison]::OrdinalIgnoreCase) -or
+            ($ExpectedPath -and -not [string]::Equals($absoluteUri.AbsolutePath, $ExpectedPath, [System.StringComparison]::Ordinal))) {
+            throw $validationError
+        }
+
+        return [pscustomobject]@{
+            DispatchUri = $Candidate
+            AbsoluteUri = $absoluteUri.AbsoluteUri
+            Path        = $absoluteUri.AbsolutePath
+        }
+    }
+
     $items = [System.Collections.Generic.List[object]]::new()
-    $nextUri = $Uri
-    while ($nextUri) {
+    $visited = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    $page = & $resolvePageUri $Uri $null
+    $collectionPath = $page.Path
+    $pageCount = 0
+    while ($page) {
+        if ($pageCount -ge $MaximumPages -or -not $visited.Add($page.AbsoluteUri)) {
+            throw $validationError
+        }
+        $pageCount++
+
         $parameters = @{
             Method     = 'GET'
-            Uri        = $nextUri
+            Uri        = $page.DispatchUri
             OutputType = 'PSObject'
         }
         if ($Headers) {
@@ -330,18 +401,31 @@ function Get-GsaGraphCollection {
         }
 
         $response = Invoke-MgGraphRequest @parameters
-        if ($response.PSObject.Properties['value']) {
-            foreach ($item in @($response.value)) {
-                $items.Add($item)
+        if (-not $response -or
+            $response -is [System.Array] -or
+            -not $response.PSObject.Properties['value']) {
+            throw $validationError
+        }
+        $pageItems = $response.value
+        if ($null -eq $pageItems -or
+            $pageItems -is [string] -or
+            $pageItems -is [System.Collections.IDictionary] -or
+            $pageItems -isnot [System.Collections.IEnumerable]) {
+            throw $validationError
+        }
+        foreach ($item in $pageItems) {
+            if ($items.Count -ge $MaximumItems) {
+                throw $validationError
             }
-            $nextUri = if ($response.PSObject.Properties['@odata.nextLink']) {
-                $response.'@odata.nextLink'
-            } else {
-                $null
+            $items.Add($item)
+        }
+
+        $page = $null
+        if ($response.PSObject.Properties['@odata.nextLink'] -and $null -ne $response.'@odata.nextLink') {
+            if ($response.'@odata.nextLink' -isnot [string]) {
+                throw $validationError
             }
-        } else {
-            $items.Add($response)
-            $nextUri = $null
+            $page = & $resolvePageUri ([string]$response.'@odata.nextLink') $collectionPath
         }
     }
     return $items.ToArray()

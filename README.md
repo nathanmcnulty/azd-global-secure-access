@@ -17,7 +17,7 @@ This template helps an administrator:
 
 ### Before you begin
 
-Install [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd), [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli), and PowerShell 7.4 or later. The guided hooks use `Az.Accounts` and `Microsoft.Graph.Authentication` when you enable certificate or Graph operations:
+Install [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd), [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli), and PowerShell 7.6 or later. The guided hooks use `Az.Accounts` and `Microsoft.Graph.Authentication` when you enable certificate or Graph operations:
 
 ```powershell
 Install-Module Az.Accounts -Scope CurrentUser
