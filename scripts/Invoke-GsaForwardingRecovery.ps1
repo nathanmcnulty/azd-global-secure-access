@@ -36,7 +36,7 @@ Assert-GsaCloudCapability -Capability $capability -Surface ForwardingMutation
 $manifest = Read-GsaStateManifest
 if (-not $manifest) { throw 'A committed ownership manifest is required for forwarding recovery.' }
 if (-not (Get-Module -ListAvailable Microsoft.Graph.Authentication)) { throw 'Install Microsoft.Graph.Authentication before forwarding recovery.' }
-$context = Connect-GsaGraph -Scopes @('NetworkAccess.ReadWrite.All') -Environment $graphEnvironment
+$context = Connect-GsaGraph -Scopes @('NetworkAccess.ReadWrite.All') -Environment $graphEnvironment -TenantId $manifest.environment.tenantId
 if ($context.TenantId -ne $manifest.environment.tenantId) { throw 'The Graph tenant does not match the ownership manifest.' }
 
 function Get-ForwardingObservation {

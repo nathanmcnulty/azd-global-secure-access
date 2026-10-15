@@ -117,7 +117,8 @@ if ($graphNeeded) {
         throw 'The selected Azure CLI subscription could not be verified.'
     }
     $azureAccount = ($accountJson -join "`n") | ConvertFrom-Json
-    $graphContext = Connect-GsaGraph -Scopes @($scopes | Select-Object -Unique) -Environment $graphEnvironment
+    Assert-GsaAzureTenantBinding -SubscriptionId $azureSubscriptionId -AzureTenantId $azureTenantId -AzureAccount $azureAccount
+    $graphContext = Connect-GsaGraph -Scopes @($scopes | Select-Object -Unique) -Environment $graphEnvironment -TenantId $azureTenantId
     Assert-GsaTenantBinding -SubscriptionId $azureSubscriptionId -AzureTenantId $azureTenantId -AzureAccount $azureAccount -GraphContext $graphContext
     $results.TenantStatus = Get-GsaTenantStatus
 }

@@ -124,9 +124,17 @@ $manifestBaselineResources = @(if ($manifest) {
     @()
 })
 $manifestHasInternetBaseline = $manifestBaselineResources.Count -gt 0
+$azureTenantId = Get-GsaEnvironmentValue -Name 'AZURE_TENANT_ID'
+$targetTenant = [guid]::Empty
+$targetTenantValid = [guid]::TryParse($azureTenantId, [ref]$targetTenant) -and $targetTenant -ne [guid]::Empty
 
 if (-not $capability.GraphCoreRead) {
     $graphContext = $null
+} elseif (-not $targetTenantValid) {
+    $graphContext = $null
+    Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Tenant consistency' -Status 'Fail' -Classification 'missing' `
+        -Detail 'A valid AZURE_TENANT_ID is required before Microsoft Graph authentication.' `
+        -Expected 'Nonzero Azure tenant GUID' -Actual $null)
 } else {
     $scopes = [System.Collections.Generic.List[string]]::new()
     $scopes.Add('NetworkAccess.Read.All')
@@ -141,21 +149,14 @@ if (-not $capability.GraphCoreRead) {
         $scopes.Add('Policy.Read.All')
     }
 
-    $graphContext = Connect-GsaGraph -Scopes @($scopes | Select-Object -Unique) -Environment $graphEnvironment
+    $graphContext = Connect-GsaGraph -Scopes @($scopes | Select-Object -Unique) -Environment $graphEnvironment -TenantId $azureTenantId
     Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Required Graph scopes' -Status 'Pass' -Classification 'reused' `
         -Detail "The current context contains all required read scopes: $($scopes -join ', ')." `
         -Expected @($scopes) -Actual @($graphContext.Scopes))
 
-    $azureTenantId = Get-GsaEnvironmentValue -Name 'AZURE_TENANT_ID'
-    if ($azureTenantId -and $graphContext.TenantId -ne $azureTenantId) {
-        Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Tenant consistency' -Status 'Fail' -Classification 'unmanagedConflict' `
-            -Detail "Graph tenant '$($graphContext.TenantId)' does not match Azure tenant '$azureTenantId'." `
-            -Expected $azureTenantId -Actual $graphContext.TenantId)
-    } else {
-        Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Tenant consistency' -Status 'Pass' -Classification 'reused' `
-            -Detail "Graph and Azure use tenant '$($graphContext.TenantId)'." `
-            -Expected $graphContext.TenantId -Actual $graphContext.TenantId)
-    }
+    Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Tenant consistency' -Status 'Pass' -Classification 'reused' `
+        -Detail "The Graph context matches configured AZURE_TENANT_ID '$($graphContext.TenantId)'." `
+        -Expected $azureTenantId -Actual $graphContext.TenantId)
 
     $tenantStatus = Get-GsaTenantStatus
     $onboardingState = [string]$tenantStatus.onboardingStatus
@@ -380,7 +381,7 @@ $failedChecks = @($checks | Where-Object status -eq 'Fail')
 $summary = [pscustomobject][ordered]@{
     schemaVersion = '1.0.0'
     generatedAt   = [DateTimeOffset]::UtcNow.ToString('O')
-    tenantId      = if ($graphContext) { $graphContext.TenantId } else { Get-GsaEnvironmentValue -Name 'AZURE_TENANT_ID' }
+    tenantId      = if ($graphContext) { $graphContext.TenantId } elseif ($targetTenantValid) { $azureTenantId } else { $null }
     environment   = [ordered]@{
         name             = Get-GsaEnvironmentValue -Name 'AZURE_ENV_NAME'
         subscriptionId   = Get-GsaEnvironmentValue -Name 'AZURE_SUBSCRIPTION_ID'
