@@ -51,7 +51,7 @@ function Test-GsaStateTransactionReadiness {
 function Test-GsaLicenseIndicator {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][object[]]$SubscribedSkus
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$SubscribedSkus
     )
 
     $enabledSkus = @($SubscribedSkus | Where-Object capabilityStatus -eq 'Enabled')
@@ -84,7 +84,7 @@ function Test-GsaLicenseIndicator {
 function Test-GsaDirectoryRoleIndicator {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][object[]]$Memberships
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Memberships
     )
 
     $roleNames = @(
@@ -109,7 +109,7 @@ function Test-GsaDirectoryRoleIndicator {
 function Test-GsaConnectorReadiness {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][object[]]$Connectors,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Connectors,
         [AllowNull()][string]$GroupName
     )
 
@@ -141,11 +141,16 @@ function Test-GsaConnectorReadiness {
 function Test-GsaCertificateReadiness {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][object[]]$Certificates,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Certificates,
         [DateTimeOffset]$Now = [DateTimeOffset]::UtcNow
     )
 
     $checks = [System.Collections.Generic.List[object]]::new()
+    if ($Certificates.Count -eq 0) {
+        $checks.Add((ConvertTo-GsaReadinessCheck -Name 'TLS certificate readiness' -Status 'Fail' -Classification 'missing' `
+            -Detail 'No TLS inspection certificates were returned for the requested or committed TLS inspection feature.' `
+            -Expected 'One or more TLS inspection certificates' -Actual @()))
+    }
     foreach ($certificate in $Certificates) {
         $status = [string]$certificate.status
         $end = if ($certificate.PSObject.Properties['validity'] -and $certificate.validity.endDateTime) {
@@ -328,7 +333,7 @@ function Get-GsaBoundedCrlEvidence {
 function Test-GsaMicrosoftTrafficRule {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][object[]]$Policies
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Policies
     )
 
     $checks = [System.Collections.Generic.List[object]]::new()
@@ -361,10 +366,15 @@ function Test-GsaMicrosoftTrafficRule {
 function Test-GsaDeployment {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][object[]]$Deployments
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Deployments
     )
 
     $checks = [System.Collections.Generic.List[object]]::new()
+    if ($Deployments.Count -eq 0) {
+        $checks.Add((ConvertTo-GsaReadinessCheck -Name 'Deployment logs' -Status 'Warning' -Classification 'missing' `
+            -Detail 'No deployment history was returned. No deployment success was observed.' `
+            -Expected 'Observable deployment history' -Actual @()))
+    }
     foreach ($deployment in $Deployments) {
         $stage = [string]$deployment.status.deploymentStage
         $actual = ConvertTo-GsaCanonicalValue -Value $deployment
