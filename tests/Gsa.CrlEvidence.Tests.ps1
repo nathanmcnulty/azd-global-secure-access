@@ -72,6 +72,25 @@ Describe 'Closed CRL publication and committed-date evidence' {
         $result.Status | Should -Be 'Fail'
         $result.Actual.published | Should -BeFalse
     }
+    It 'does not treat a caller date string alone as decoded DER evidence' {
+        $state = New-CrlObservation
+        $state | Add-Member observedThisUpdate '2026-10-01T00:00:00Z'
+        $state | Add-Member observedNextUpdate '2026-11-01T00:00:00Z'
+        $result = Test-GsaCrlReadiness -CrlState $state -Now $now
+        $result.Actual.expiryObserved | Should -BeFalse
+        $result.Actual.failureCode | Should -BeExactly 'ObservedExpiryUnknown'
+    }
+    It 'uses decoded observed expiry instead of a future committed advisory date' {
+        $state = New-CrlObservation
+        $state | Add-Member derDecoded $true
+        $state | Add-Member observedThisUpdate '2026-09-01T00:00:00Z'
+        $state | Add-Member observedNextUpdate '2026-10-10T00:00:00Z'
+        $result = Test-GsaCrlReadiness -CrlState $state -Now $now
+        $result.Status | Should -BeExactly 'Fail'
+        $result.Actual.failureCode | Should -BeExactly 'ObservedExpiryExpired'
+        $result.Actual.nextUpdate | Should -BeExactly '2026-11-11T00:00:00.0000000+00:00'
+        $result.Actual.expiryObserved | Should -BeTrue
+    }
     It 'omits unknown provider fields and leaves its input unchanged' {
         $state = New-CrlObservation
         $state.published = $false
@@ -82,7 +101,9 @@ Describe 'Closed CRL publication and committed-date evidence' {
         $result = Test-GsaCrlReadiness -CrlState $state -Now $now
         ($result | ConvertTo-Json -Depth 20) | Should -Not -Match 'CANARY_'
         ($state | ConvertTo-Json -Depth 20) | Should -BeExactly $before
-        @($result.Actual.PSObject.Properties.Name).Count | Should -Be 10
+        @($result.Actual.PSObject.Properties.Name).Count | Should -Be 13
+        $result.Actual.signatureVerified | Should -BeFalse
+        $result.Actual.issuerVerified | Should -BeFalse
     }
 }
 Describe 'Actual read-only entrypoint CRL byte observation' {

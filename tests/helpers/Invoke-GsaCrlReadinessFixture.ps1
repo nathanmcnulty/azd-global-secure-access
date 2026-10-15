@@ -3,7 +3,8 @@ param(
     [ValidateSet('matched','mismatch','failed','wrongType','absent','emptyBaseline','unrelatedBaseline','noManifest','emptyManifest','actualTransport','missingTenant')]
     [string]$Case,
     [string]$Root,
-    [string]$CrlUri
+    [string]$CrlUri,
+    [string]$CrlPath
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -23,7 +24,8 @@ function Get-GsaStatePath { param([switch]$Pending) Join-Path $PSScriptRoot 'non
 function Read-GsaStateManifest {
     param($Path)
     if ($Case -eq 'noManifest') { return $null }
-    $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]](1,2,3,4)))
+    $fixtureBytes = if ($Case -eq 'actualTransport') { [IO.File]::ReadAllBytes($CrlPath) } else { [byte[]](1,2,3,4) }
+    $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($fixtureBytes))
     if ($Case -eq 'mismatch') { $digest = 'A' * 64 }
     [pscustomobject]@{
         schemaVersion='1.0.0'; desiredState=[pscustomobject]@{ fingerprint='fixture' }
@@ -43,10 +45,15 @@ function Get-GsaBoundedCrlEvidence {
         return Gsa.Readiness\Get-GsaBoundedCrlEvidence -Uri $Uri
     }
     if ($Uri -cne 'http://CANARY_URL.invalid/?sig=CANARY_SIG') { throw 'FORBIDDEN_DISPATCH' }
-    if ($Case -eq 'failed') { return [pscustomobject]@{ published=$false; actualSha256=$null } }
+    if ($Case -eq 'failed') {
+        return [pscustomobject]@{ published=$false; actualSha256=$null; derDecoded=$false; observedThisUpdate=$null; observedNextUpdate=$null }
+    }
     [pscustomobject]@{
         published = $Case -ne 'wrongType'
         actualSha256 = $(if ($Case -eq 'wrongType') { $null } else { [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]](1,2,3,4))) })
+        derDecoded = $false
+        observedThisUpdate = $null
+        observedNextUpdate = $null
     }
 }
 function Connect-GsaGraph { throw 'FORBIDDEN_DISPATCH' }

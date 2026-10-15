@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][int] $Port,
     [Parameter(Mandatory)][ValidateSet('valid','redirect','wrongType','parameterizedType','badStatus','empty','truncated','oversizedLength','oversizedBody','slowBody','proxySentinel')][string] $Scenario,
     [Parameter(Mandatory)][string] $ReadyPath,
-    [Parameter(Mandatory)][string] $RequestPath
+    [Parameter(Mandatory)][string] $RequestPath,
+    [string] $BodyPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,20 +44,20 @@ try {
             }
             $requests.Add([Text.Encoding]::ASCII.GetString($headerBytes.ToArray()))
 
-            $body = [byte[]](1, 2, 3, 4)
+            $body = if ($BodyPath) { [IO.File]::ReadAllBytes($BodyPath) } else { [byte[]](1, 2, 3, 4) }
             $status = '200 OK'
             $contentType = 'application/pkix-crl'
-            $contentLength = '4'
+            $contentLength = [string]$body.Length
             switch ($Scenario) {
                 'redirect' { $status = '302 Found'; $contentType = 'text/plain'; $contentLength = '0' }
                 'wrongType' { $contentType = 'text/plain' }
                 'parameterizedType' { $contentType = 'application/pkix-crl; charset=binary' }
                 'badStatus' { $status = '503 Service Unavailable' }
                 'empty' { $body = [byte[]]::new(0); $contentLength = '0' }
-                'truncated' { $contentLength = '8' }
+                'truncated' { $contentLength = [string]($body.Length + 4) }
                 'oversizedLength' { $body = [byte[]]::new(0); $contentLength = '1048577' }
                 'oversizedBody' { $body = [byte[]]::new(1048577); $contentLength = $null }
-                'slowBody' { $contentLength = '4' }
+                'slowBody' { $contentLength = [string]$body.Length }
                 'proxySentinel' { $status = '407 Proxy Authentication Required'; $contentType = 'text/plain'; $contentLength = '0' }
             }
             $headers = "HTTP/1.1 $status`r`nContent-Type: $contentType`r`nConnection: close`r`n"
