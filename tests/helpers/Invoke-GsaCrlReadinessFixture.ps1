@@ -1,5 +1,10 @@
 #Requires -Version 7.6
-param([ValidateSet('matched','mismatch','failed','wrongType','absent','emptyBaseline','unrelatedBaseline','noManifest','emptyManifest')][string]$Case, [string]$Root)
+param(
+    [ValidateSet('matched','mismatch','failed','wrongType','absent','emptyBaseline','unrelatedBaseline','noManifest','emptyManifest','actualTransport')]
+    [string]$Case,
+    [string]$Root,
+    [string]$CrlUri
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $Root 'scripts/modules/Gsa.Readiness.psm1') -Force
@@ -19,17 +24,24 @@ function Read-GsaStateManifest {
         resources=@($(if ($Case -notin @('emptyBaseline','emptyManifest')) {
             [pscustomobject]@{ kind=$(if ($Case -eq 'unrelatedBaseline') { 'UnrelatedFixture' } else { 'Microsoft.Graph/networkAccess/filteringPolicy' }); key='fixtureBaseline' }
         }); $(if ($Case -notin @('absent','emptyManifest')) {
-            [pscustomobject]@{ kind='Microsoft.Storage/crl'; id='http://CANARY_URL.invalid/?sig=CANARY_SIG'; key='fixtureCrl'; ownership='managed'; observedState=[pscustomobject]@{ NextUpdate='2099-11-11T00:00:00Z'; Sha256=$digest } }
+            [pscustomobject]@{ kind='Microsoft.Storage/crl'; id=$(if ($Case -eq 'actualTransport') { $CrlUri } else { 'http://CANARY_URL.invalid/?sig=CANARY_SIG' }); key='fixtureCrl'; ownership='managed'; observedState=[pscustomobject]@{ NextUpdate='2099-11-11T00:00:00Z'; Sha256=$digest } }
         }))
     }
 }
 $global:gsaCrlFixtureReads = 0
-function Invoke-WebRequest {
-    param($Uri, $TimeoutSec)
+function Get-GsaBoundedCrlEvidence {
+    param($Uri)
     $global:gsaCrlFixtureReads++
-    if ($Uri -cne 'http://CANARY_URL.invalid/?sig=CANARY_SIG' -or $TimeoutSec -ne 15) { throw 'FORBIDDEN_DISPATCH' }
-    if ($Case -eq 'failed') { throw [System.Exception]::new('CANARY_PROVIDER CANARY_TOKEN', [System.Exception]::new('CANARY_INNER')) }
-    [pscustomobject]@{ StatusCode=200; Content=[byte[]](1,2,3,4); Headers=@{ 'Content-Type'=$(if ($Case -eq 'wrongType') { 'text/plain' } else { 'application/pkix-crl' }) } }
+    if ($Case -eq 'actualTransport') {
+        if ($Uri -cne $CrlUri) { throw 'FORBIDDEN_DISPATCH' }
+        return Gsa.Readiness\Get-GsaBoundedCrlEvidence -Uri $Uri
+    }
+    if ($Uri -cne 'http://CANARY_URL.invalid/?sig=CANARY_SIG') { throw 'FORBIDDEN_DISPATCH' }
+    if ($Case -eq 'failed') { return [pscustomobject]@{ published=$false; actualSha256=$null } }
+    [pscustomobject]@{
+        published = $Case -ne 'wrongType'
+        actualSha256 = $(if ($Case -eq 'wrongType') { $null } else { [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]](1,2,3,4))) })
+    }
 }
 function Connect-GsaGraph { throw 'FORBIDDEN_DISPATCH' }
 function Invoke-MgGraphRequest { throw 'FORBIDDEN_DISPATCH' }

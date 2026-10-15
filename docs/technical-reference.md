@@ -414,7 +414,7 @@ Classifications are `managed`, `reused`, `missing`, `changed`, `unmanagedConflic
 - reports failed, pending, and unknown deployment stages with error messages;
 - inventories Adaptive Access/Conditional Access signaling without changing it;
 - checks Graph TLS certificate status and 90-day expiry;
-- retrieves the committed CRL, verifies its exact SHA-256 fingerprint, and reports seven-day/expired thresholds;
+- retrieves the committed CRL through an anonymous, no-redirect streaming request with a 15-second total deadline and 1 MiB byte limit, verifies its exact SHA-256 fingerprint only after a complete HTTP 200 `application/pkix-crl` body, and reports seven-day/expired thresholds;
 - compares committed object IDs and desired fingerprints through GET-only Graph calls;
 - verifies the managed Internet policy chain whenever it is enabled for execution or recorded in committed state.
 
@@ -725,6 +725,14 @@ expiry, licensing, connector or endpoint readiness.
 
 This is partial GSA-003 work. Other readiness DTOs retain their existing contracts
 and may contain provider details; this change does not anonymize the full report.
-The existing public HTTP CDP and retrieval behavior remain unchanged. The CRL
-check never renews certificates, writes tenant state or sends alerts. Offline
-fixtures prove these selected code paths, not live publication or issuer trust.
+The public HTTP CDP remains intentional. Readiness accepts only absolute HTTP or
+HTTPS locations without user information or fragments, sends no cookies or
+default credentials, bypasses ambient HTTP proxies, follows no redirects, and
+applies one 15-second deadline to headers and the complete streamed body. Hosts
+that require an outbound proxy fail closed rather than forwarding the CRL request
+or proxy credentials. Responses over 1 MiB, empty or truncated
+bodies, non-200 status, and non-`application/pkix-crl` media types fail closed.
+Only completed bounded bytes are hashed; failures retain the existing closed DTO
+without URL or provider error details. The CRL check never renews certificates,
+writes tenant state or sends alerts. Offline loopback fixtures prove these selected
+transport paths, not live publication or issuer trust.
