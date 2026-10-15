@@ -120,6 +120,21 @@ Readiness uses `NetworkAccess.Read.All`, `NetworkAccessPolicy.Read.All`, and `Us
 
 The permissions above are delegated Microsoft Graph permissions for the interactive operator. Consent is separate from the GSA, Application, Intune, Security, and Azure roles that operate the target features. Route Microsoft Graph API consent to a **Global Administrator or Privileged Role Administrator**; do not assume that a feature administrator can consent simply because that role can call the corresponding endpoint. `AppRoleAssignment.ReadWrite.All` is a delegated Graph permission used for the pilot assignment path, not a runtime application permission, and the operator still needs the supported Entra role for the specific assignment. If the required Graph consent is missing, readiness or the selected feature gate stops before tenant mutation.
 
+Every Graph-enabled command supplies a valid nonzero target tenant before reading
+or changing Graph authentication state. Deployment, readiness and remote-network
+inventory use configured `AZURE_TENANT_ID`; manifest-bound recovery, cleanup
+inventory and remote-network execution use the committed manifest tenant.
+Post-provision also compares the configured subscription and tenant with
+`az account show` before Graph login or consent, then retains the combined
+Azure/Graph tenant check after connection. A
+cached context is reused only when its tenant and Graph cloud both match. A
+mismatch fails before login or consent; an absent matching context or missing
+scope starts normal browser authentication with the exact target tenant, then
+tenant, cloud and scopes are checked again. Readiness reports a failed tenant
+consistency check and makes no Graph request when its configured tenant is absent
+or invalid. This binding does not verify a current Azure CLI login and does not
+replace the broader account/probe/interaction qualification tracked in GSA-003.
+
 ### Connector prerequisite
 
 Quick Access and Private Access require an existing connector group with at least one active connector. Connector installation is an external-host operation and cannot be completed by Bicep.

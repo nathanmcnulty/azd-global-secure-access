@@ -43,7 +43,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Apply') {
     $capability = Get-GsaCloudCapability -AzureCloud $azureCloud -GraphEnvironment $graphEnvironment
     if ($azureCloud -ne 'AzureCloud' -or $graphEnvironment -ne 'Global') { throw 'Remote-network mutation is validated only for the commercial Global Microsoft Graph endpoint.' }
     Assert-GsaCloudCapability -Capability $capability -Surface GraphMutation
-    $context = Connect-GsaGraph -Scopes @('NetworkAccess.ReadWrite.All', 'LicenseAssignment.Read.All') -Environment $graphEnvironment
+    $context = Connect-GsaGraph -Scopes @('NetworkAccess.ReadWrite.All', 'LicenseAssignment.Read.All') -Environment $graphEnvironment -TenantId $manifest.environment.tenantId
     if ([string]$context.TenantId -ne [string]$manifest.environment.tenantId) { throw 'The Graph tenant does not match the ownership manifest.' }
     $currentNetworks = @(Get-GsaGraphCollection -Uri '/beta/networkAccess/connectivity/remoteNetworks' -Headers @{ Prefer = 'include-unknown-enum-members' })
     foreach ($network in $currentNetworks) {

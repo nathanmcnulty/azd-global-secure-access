@@ -31,7 +31,7 @@ if ($liveReads -and $graphResources.Count -gt 0) {
     }
     $graphEnvironment = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ENVIRONMENT' -Default 'Global'
     $scopes = @('NetworkAccess.Read.All', 'NetworkAccessPolicy.Read.All', 'Policy.Read.All', 'Directory.Read.All', 'DeviceManagementConfiguration.Read.All')
-    $context = Connect-GsaGraph -Scopes $scopes -Environment $graphEnvironment
+    $context = Connect-GsaGraph -Scopes $scopes -Environment $graphEnvironment -TenantId $manifest.environment.tenantId
     if ($context.TenantId -ne $manifest.environment.tenantId) {
         throw "Graph tenant '$($context.TenantId)' does not match manifest tenant '$($manifest.environment.tenantId)'."
     }

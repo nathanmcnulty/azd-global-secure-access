@@ -1,6 +1,6 @@
 #Requires -Version 7.6
 param(
-    [ValidateSet('matched','mismatch','failed','wrongType','absent','emptyBaseline','unrelatedBaseline','noManifest','emptyManifest','actualTransport')]
+    [ValidateSet('matched','mismatch','failed','wrongType','absent','emptyBaseline','unrelatedBaseline','noManifest','emptyManifest','actualTransport','missingTenant')]
     [string]$Case,
     [string]$Root,
     [string]$CrlUri
@@ -12,7 +12,13 @@ function Import-Module { param($Name, [switch]$Force) }
 function Get-Module { param([switch]$ListAvailable, $Name) [pscustomobject]@{ Name='FixtureOnly' } }
 function Assert-GsaPreviewGate { param($Feature, $Enabled) }
 function Get-GsaEnvironmentValue { param($Name, $Default) $Default }
-function Get-GsaCloudCapability { param($AzureCloud, $GraphEnvironment) [pscustomobject]@{ GraphCoreRead=$false; Evidence='Fixture unsupported cloud'; ExpectedGraphEnvironments=@() } }
+function Get-GsaCloudCapability {
+    param($AzureCloud, $GraphEnvironment)
+    if ($Case -eq 'missingTenant') {
+        return [pscustomobject]@{ GraphCoreRead=$true; Evidence='Fixture supported cloud'; ExpectedGraphEnvironments=@('Global'); ArmEndpoint='https://management.azure.com/' }
+    }
+    [pscustomobject]@{ GraphCoreRead=$false; Evidence='Fixture unsupported cloud'; ExpectedGraphEnvironments=@() }
+}
 function Get-GsaStatePath { param([switch]$Pending) Join-Path $PSScriptRoot 'nonexistent-fixture-state.json' }
 function Read-GsaStateManifest {
     param($Path)

@@ -108,28 +108,71 @@ function Connect-GsaGraph {
         [Parameter(Mandatory)]
         [string[]]$Scopes,
         [ValidateSet('Global', 'USGov', 'USGovDoD', 'China')]
-        [string]$Environment = 'Global'
+        [string]$Environment = 'Global',
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$TenantId
     )
 
-    $context = Get-MgContext -ErrorAction SilentlyContinue
-    if ($context -and $context.Environment -ne $Environment) {
-        throw "Microsoft Graph is connected to '$($context.Environment)' but '$Environment' is required for this environment."
+    $targetTenant = [guid]::Empty
+    if (-not [guid]::TryParse($TenantId, [ref]$targetTenant) -or $targetTenant -eq [guid]::Empty) {
+        throw 'A valid target Azure tenant ID is required before Microsoft Graph authentication.'
     }
-    $missing = if ($context) {
-        @($Scopes | Where-Object { $_ -notin $context.Scopes })
-    } else {
-        @($Scopes)
+    $normalizedTenantId = $targetTenant.ToString('D')
+
+    $getContextState = {
+        param([AllowNull()][object]$Context)
+
+        if (-not $Context) { return $null }
+        if (-not $Context.PSObject.Properties['TenantId'] -or
+            -not $Context.PSObject.Properties['Environment'] -or
+            -not $Context.PSObject.Properties['Scopes']) {
+            throw 'Microsoft Graph context validation failed.'
+        }
+        $contextTenant = [guid]::Empty
+        if (-not [guid]::TryParse([string]$Context.TenantId, [ref]$contextTenant) -or
+            $contextTenant -eq [guid]::Empty -or
+            [string]::IsNullOrWhiteSpace([string]$Context.Environment) -or
+            $null -eq $Context.Scopes -or
+            $Context.Scopes -is [string] -or
+            $Context.Scopes -isnot [System.Collections.IEnumerable]) {
+            throw 'Microsoft Graph context validation failed.'
+        }
+        return [pscustomobject]@{
+            Tenant      = $contextTenant
+            Environment = [string]$Context.Environment
+            Scopes      = @($Context.Scopes)
+        }
     }
 
-    if (-not $context -or $missing.Count -gt 0) {
-        Connect-MgGraph -Scopes $Scopes -Environment $Environment -NoWelcome | Out-Null
-        $context = Get-MgContext
+    try {
+        $context = Get-MgContext -ErrorAction Stop
+    } catch {
+        throw 'Microsoft Graph context validation failed.'
+    }
+    $state = & $getContextState $context
+    if ($state -and ($state.Tenant -ne $targetTenant -or $state.Environment -ne $Environment)) {
+        throw 'The current Microsoft Graph context does not match the required tenant and cloud.'
     }
 
-    if ($context.Environment -ne $Environment) {
-        throw "Microsoft Graph connected to '$($context.Environment)' instead of '$Environment'."
+    $missing = @(
+        if ($state) { $Scopes | Where-Object { $_ -notin $state.Scopes } } else { $Scopes }
+    )
+    if (-not $state -or $missing.Count -gt 0) {
+        Connect-MgGraph -TenantId $normalizedTenantId -Scopes $Scopes -Environment $Environment -NoWelcome | Out-Null
+        try {
+            $context = Get-MgContext -ErrorAction Stop
+        } catch {
+            throw 'Microsoft Graph context validation failed.'
+        }
+        $state = & $getContextState $context
     }
-    $missing = @($Scopes | Where-Object { $_ -notin $context.Scopes })
+
+    if (-not $state -or $state.Tenant -ne $targetTenant -or $state.Environment -ne $Environment) {
+        throw 'Microsoft Graph authentication did not return the required tenant and cloud.'
+    }
+    $missing = @($Scopes | Where-Object { $_ -notin $state.Scopes })
     if ($missing.Count -gt 0) {
         throw "Microsoft Graph consent is missing: $($missing -join ', ')."
     }
@@ -145,14 +188,25 @@ function Assert-GsaTenantBinding {
         [Parameter(Mandatory)][object]$GraphContext
     )
 
+    Assert-GsaAzureTenantBinding -SubscriptionId $SubscriptionId -AzureTenantId $AzureTenantId -AzureAccount $AzureAccount
+    if ($GraphContext.TenantId -ne $AzureTenantId) {
+        throw 'The Graph tenant does not match the selected Azure tenant.'
+    }
+}
+
+function Assert-GsaAzureTenantBinding {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SubscriptionId,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$AzureTenantId,
+        [Parameter(Mandatory)][object]$AzureAccount
+    )
+
     if ([string]::IsNullOrWhiteSpace($SubscriptionId) -or [string]::IsNullOrWhiteSpace($AzureTenantId)) {
         throw 'Azure subscription and tenant are required before Graph mutation.'
     }
     if ($AzureAccount.id -ne $SubscriptionId -or $AzureAccount.tenantId -ne $AzureTenantId) {
         throw 'The selected Azure CLI subscription or tenant does not match the azd target.'
-    }
-    if ($GraphContext.TenantId -ne $AzureTenantId) {
-        throw 'The Graph tenant does not match the selected Azure tenant.'
     }
 }
 
@@ -558,6 +612,7 @@ function Get-GsaSegmentKey {
 }
 
 Export-ModuleMember -Function @(
+    'Assert-GsaAzureTenantBinding',
     'Assert-GsaTenantBinding',
     'Assert-GsaPreviewGate',
     'Assert-GsaCloudCapability',
