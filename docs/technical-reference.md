@@ -80,12 +80,12 @@ The design separates:
 - [Bicep](https://learn.microsoft.com/azure/azure-resource-manager/bicep/install), available through Azure CLI
 - `Az.Accounts` for TLS/CRL operations
 - `Microsoft.Graph.Authentication` for Graph operations
-- Pester 5.7.1 and PSScriptAnalyzer 1.25.0 for the repository validation commands
+- Pester 6.2.0 and PSScriptAnalyzer 1.25.0 for the repository validation commands
 
 ```powershell
 Install-Module Az.Accounts -Scope CurrentUser
 Install-Module Microsoft.Graph.Authentication -Scope CurrentUser
-Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser
+Install-Module Pester -RequiredVersion 6.2.0 -Scope CurrentUser
 Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser
 ```
 

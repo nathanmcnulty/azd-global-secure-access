@@ -106,7 +106,7 @@ Describe 'GSA Internet Access baseline' {
 
         $result = Set-GsaInternetBaseline -Name 'Baseline Filter' -BlockedCategories 'SocialNetworking' -SecurityProfileName 'Baseline Profile' -ConditionalAccessPolicyName 'Baseline CA'
 
-        Assert-MockCalled -ModuleName Gsa.Graph Invoke-MgGraphRequest -ParameterFilter { $Method -eq 'POST' } -Times 0
+        Should -Invoke -ModuleName Gsa.Graph Invoke-MgGraphRequest -ParameterFilter { $Method -eq 'POST' } -Times 0
         $result.FilteringPolicyId | Should -Be 'policy-id'
         $result.SecurityProfileId | Should -Be 'profile-id'
         $result.ConditionalAccessPolicyId | Should -Be 'ca-id'
@@ -231,6 +231,6 @@ Describe 'GSA Internet Access baseline' {
         $result.FilteringPolicyId | Should -Be 'policy-id'
         $result.SecurityProfileId | Should -Be 'profile-id'
         $result.ConditionalAccessPolicyId | Should -Be 'ca-id'
-        Assert-MockCalled -ModuleName Gsa.Graph Invoke-MgGraphRequest -ParameterFilter { $Method -eq 'POST' } -Times 0
+        Should -Invoke -ModuleName Gsa.Graph Invoke-MgGraphRequest -ParameterFilter { $Method -eq 'POST' } -Times 0
     }
 }
