@@ -36,7 +36,7 @@ Run the shortest supported path:
 azd init -t nathanmcnulty/azd-global-secure-access && azd up
 ```
 
-By default, this provisions the Azure foundation without changing GSA forwarding, applications, Intune profiles, certificates, or Conditional Access. The hooks reuse normal Azure and Microsoft Graph cached or browser authentication; they do not use device-code authentication.
+By default, this provisions the Azure foundation without changing GSA forwarding, applications, Intune profiles, certificates, or Conditional Access. Graph-enabled commands require an explicit valid target tenant, reuse only a matching cached tenant and cloud, and pass that tenant to normal Microsoft Graph browser authentication when interaction is needed. They do not use device-code authentication.
 
 Before provisioning, the template shows the selected environment and safety gates. For an additional Azure-only preview, run `azd provision --preview` from the initialized project.
 

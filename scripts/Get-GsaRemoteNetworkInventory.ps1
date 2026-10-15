@@ -18,7 +18,8 @@ $graphEnvironment = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ENVIRONMENT' -Defau
 $capability = Get-GsaCloudCapability -AzureCloud $azureCloud -GraphEnvironment $graphEnvironment
 Assert-GsaCloudCapability -Capability $capability -Surface GraphCoreRead
 
-$context = Connect-GsaGraph -Scopes @('NetworkAccess.Read.All', 'Policy.Read.All', 'LicenseAssignment.Read.All') -Environment $graphEnvironment
+$azureTenantId = Get-GsaEnvironmentValue -Name 'AZURE_TENANT_ID' -Required
+$context = Connect-GsaGraph -Scopes @('NetworkAccess.Read.All', 'Policy.Read.All', 'LicenseAssignment.Read.All') -Environment $graphEnvironment -TenantId $azureTenantId
 $remoteNetworks = @(Get-GsaGraphCollection -Uri '/beta/networkAccess/connectivity/remoteNetworks' -Headers @{ Prefer = 'include-unknown-enum-members' })
 foreach ($network in $remoteNetworks) {
     $links = @(Get-GsaGraphCollection -Uri "/beta/networkAccess/connectivity/remoteNetworks/$($network.id)/deviceLinks" -Headers @{ Prefer = 'include-unknown-enum-members' })
