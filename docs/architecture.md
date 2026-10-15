@@ -98,7 +98,7 @@ flowchart TD
 flowchart LR
   Change[Reviewed source change] --> Parser[PowerShell parser]
   Parser --> Analyzer[PSScriptAnalyzer 1.25.0]
-  Analyzer --> Tests[Pester 5.7.1]
+  Analyzer --> Tests[Pester 6.2.0]
   Tests --> Bicep[Bicep build]
   Bicep --> Azd[Isolated azd 1.30.0 load]
   Azd --> Audit[Diff and packaged-content audit]
