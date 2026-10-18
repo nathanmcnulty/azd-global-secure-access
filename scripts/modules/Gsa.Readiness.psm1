@@ -200,6 +200,27 @@ function Test-GsaCrlReadiness {
     $dateValid = $datePresent -and $dateProperty.Value -is [string] -and $dateProperty.Value.Length -le 40 -and
         $dateProperty.Value -cmatch '\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})\z' -and
         [DateTimeOffset]::TryParse($dateProperty.Value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$committedDate)
+    $decodedProperty = $CrlState.PSObject.Properties['derDecoded']
+    $derDecoded = $null -ne $decodedProperty -and $decodedProperty.Value -is [bool] -and $decodedProperty.Value
+    $observedDates = @{}
+    $observedDatesValid = $derDecoded
+    foreach ($name in @('observedThisUpdate', 'observedNextUpdate')) {
+        $property = $CrlState.PSObject.Properties[$name]
+        if ($null -eq $property -or $null -eq $property.Value -or $property.Value -eq '') {
+            $observedDates[$name] = $null
+            if ($name -eq 'observedThisUpdate') { $observedDatesValid = $false }
+            continue
+        }
+        $parsed = [DateTimeOffset]::MinValue
+        if ($property.Value -isnot [string] -or $property.Value.Length -gt 40 -or
+            $property.Value -cnotmatch '\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})\z' -or
+            -not [DateTimeOffset]::TryParse($property.Value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$parsed)) {
+            $observedDatesValid = $false
+            $observedDates[$name] = $null
+        } else {
+            $observedDates[$name] = $parsed.ToUniversalTime()
+        }
+    }
     $actual = [ordered]@{
         published = [bool]$published
         expectedSha256 = $hashes.expectedSha256
@@ -209,8 +230,11 @@ function Test-GsaCrlReadiness {
         # Retain the legacy field as an explicitly labelled committed-date alias.
         nextUpdate = if ($dateValid) { $committedDate.ToUniversalTime().ToString('O') } else { $null }
         nextUpdateSource = 'committedState'
-        observedNextUpdate = $null
+        observedThisUpdate = if ($observedDates.observedThisUpdate) { $observedDates.observedThisUpdate.ToString('O') } else { $null }
+        observedNextUpdate = if ($observedDates.observedNextUpdate) { $observedDates.observedNextUpdate.ToString('O') } else { $null }
         expiryObserved = $false
+        signatureVerified = $false
+        issuerVerified = $false
         failureCode = 'ObservedExpiryUnknown'
     }
     $status = 'Warning'
@@ -225,6 +249,30 @@ function Test-GsaCrlReadiness {
     } elseif (-not $hashMatches) {
         $status = 'Fail'; $classification = 'changed'; $actual.failureCode = 'HashMismatch'
         $detail = 'The published CRL bytes do not match the committed SHA-256 fingerprint.'
+    } elseif ($derDecoded -and -not $observedDatesValid) {
+        $status = 'Fail'; $classification = 'unknownTransitional'; $actual.failureCode = 'ObservedDatesInvalid'
+        $detail = 'The downloaded CRL structure did not yield a valid observed thisUpdate value.'
+    } elseif ($derDecoded -and $null -eq $observedDates.observedNextUpdate) {
+        $status = 'Fail'; $classification = 'unknownTransitional'; $actual.failureCode = 'ObservedNextUpdateMissing'
+        $detail = 'The downloaded CRL does not contain nextUpdate, so expiration cannot be established.'
+    } elseif ($derDecoded) {
+        $actual.expiryObserved = $true
+        if ($observedDates.observedNextUpdate -lt $observedDates.observedThisUpdate) {
+            $status = 'Fail'; $classification = 'changed'; $actual.failureCode = 'ObservedValidityInverted'
+            $detail = 'The downloaded CRL nextUpdate precedes thisUpdate.'
+        } elseif ($observedDates.observedThisUpdate -gt $Now) {
+            $status = 'Fail'; $classification = 'changed'; $actual.failureCode = 'ObservedThisUpdateFuture'
+            $detail = 'The downloaded CRL thisUpdate is in the future.'
+        } elseif ($observedDates.observedNextUpdate -le $Now) {
+            $status = 'Fail'; $classification = 'changed'; $actual.failureCode = 'ObservedExpiryExpired'
+            $detail = 'The downloaded CRL nextUpdate has passed.'
+        } elseif ($observedDates.observedNextUpdate -le $Now.AddDays(7)) {
+            $classification = 'changed'; $actual.failureCode = 'ObservedExpiryNear'
+            $detail = 'The downloaded CRL nextUpdate is within seven days; its signature and issuer were not verified.'
+        } else {
+            $actual.failureCode = 'ObservedDatesUntrusted'
+            $detail = 'The downloaded CRL dates are current; its signature and issuer were not verified.'
+        }
     } elseif (-not $datePresent) {
         $actual.failureCode = 'CommittedExpiryMissing'
         $detail = 'Published bytes match committed SHA-256, but no expiry is recorded in committed state.'
@@ -239,7 +287,49 @@ function Test-GsaCrlReadiness {
         $detail = 'The committed CRL expiry date is within seven days; expiry was not observed from CRL bytes.'
     }
     return ConvertTo-GsaReadinessCheck -Name 'CRL publication' -Status $status -Classification $classification `
-        -Detail $detail -Expected 'Exact published bytes and separately qualified committed expiry' -Actual ([pscustomobject]$actual)
+        -Detail $detail -Expected 'Exact published bytes and decoded current CRL dates; issuer and signature trust separately qualified' -Actual ([pscustomobject]$actual)
+}
+
+function ConvertFrom-GsaCrl {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][byte[]] $Bytes)
+
+    $crlNumber = [Numerics.BigInteger]::Zero
+    $null = [Security.Cryptography.X509Certificates.CertificateRevocationListBuilder]::Load($Bytes, [ref]$crlNumber)
+
+    $reader = [Formats.Asn1.AsnReader]::new($Bytes, [Formats.Asn1.AsnEncodingRules]::DER)
+    $certificateList = $reader.ReadSequence()
+    $tbsCertificateList = $certificateList.ReadSequence()
+    if ($tbsCertificateList.PeekTag().TagClass -eq [Formats.Asn1.TagClass]::Universal -and
+        $tbsCertificateList.PeekTag().TagValue -eq [int][Formats.Asn1.UniversalTagNumber]::Integer) {
+        $null = $tbsCertificateList.ReadInteger()
+    }
+    $null = $tbsCertificateList.ReadEncodedValue() # signature AlgorithmIdentifier
+    $null = $tbsCertificateList.ReadEncodedValue() # issuer Name
+
+    $readTime = {
+        param([Formats.Asn1.AsnReader] $TimeReader)
+        $tag = $TimeReader.PeekTag()
+        if ($tag.TagClass -ne [Formats.Asn1.TagClass]::Universal) { throw 'CRL time is invalid.' }
+        switch ($tag.TagValue) {
+            ([int][Formats.Asn1.UniversalTagNumber]::UtcTime) { return $TimeReader.ReadUtcTime() }
+            ([int][Formats.Asn1.UniversalTagNumber]::GeneralizedTime) { return $TimeReader.ReadGeneralizedTime() }
+            default { throw 'CRL time is invalid.' }
+        }
+    }
+    $thisUpdate = & $readTime $tbsCertificateList
+    $nextUpdate = $null
+    if ($tbsCertificateList.HasData) {
+        $nextTag = $tbsCertificateList.PeekTag()
+        if ($nextTag.TagClass -eq [Formats.Asn1.TagClass]::Universal -and
+            $nextTag.TagValue -in @([int][Formats.Asn1.UniversalTagNumber]::UtcTime, [int][Formats.Asn1.UniversalTagNumber]::GeneralizedTime)) {
+            $nextUpdate = & $readTime $tbsCertificateList
+        }
+    }
+    return [pscustomobject][ordered]@{
+        thisUpdate = $thisUpdate.ToUniversalTime().ToString('O')
+        nextUpdate = if ($nextUpdate) { $nextUpdate.ToUniversalTime().ToString('O') } else { $null }
+    }
 }
 
 function Get-GsaBoundedCrlEvidence {
@@ -252,8 +342,11 @@ function Get-GsaBoundedCrlEvidence {
     )
 
     $closed = [pscustomobject][ordered]@{
-        published    = $false
-        actualSha256 = $null
+        published          = $false
+        actualSha256       = $null
+        derDecoded         = $false
+        observedThisUpdate = $null
+        observedNextUpdate = $null
     }
     $parsedUri = $null
     if (-not [Uri]::TryCreate($Uri, [UriKind]::Absolute, [ref]$parsedUri) -or
@@ -311,9 +404,13 @@ function Get-GsaBoundedCrlEvidence {
         if ($total -eq 0 -or ($null -ne $contentLength -and $total -ne $contentLength)) { return $closed }
 
         $bytes = $buffered.ToArray()
+        $dates = ConvertFrom-GsaCrl -Bytes $bytes
         return [pscustomobject][ordered]@{
-            published    = $true
-            actualSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+            published          = $true
+            actualSha256       = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+            derDecoded         = $true
+            observedThisUpdate = $dates.thisUpdate
+            observedNextUpdate = $dates.nextUpdate
         }
     }
     catch {
