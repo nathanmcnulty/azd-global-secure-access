@@ -5,7 +5,7 @@ This template uses Semantic Versioning while it remains pre-1.0. A minor version
 ## Release checklist
 
 1. Confirm `azure.yaml` `metadata.template`, the top entry in `CHANGELOG.md`, and the proposed Git tag use the same version.
-2. Run the pinned PowerShell parser, PSScriptAnalyzer 1.25.0, Pester 5.7.1, Bicep, azd 1.30.0 isolated-environment, diff, and packaged-content checks.
+2. Run the pinned PowerShell parser, PSScriptAnalyzer 1.25.0, Pester 6.2.0, Bicep, azd 1.30.0 isolated-environment, diff, and packaged-content checks.
 3. Confirm tests and CI perform no live Azure, Entra, Graph, Intune, router, connector, or tenant deployment.
 4. Review API maturity and supported-cloud statements against current official Microsoft documentation.
 5. Review every committed fixture and sample for identifying values, credentials, private certificate material, and other secret-shaped content.
