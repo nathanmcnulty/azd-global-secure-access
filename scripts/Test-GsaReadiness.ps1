@@ -363,10 +363,16 @@ if ($manifest) {
             expectedSha256 = $crlResource.observedState.Sha256
             actualSha256 = $null
             hashMatches = $false
+            derDecoded = $false
+            observedThisUpdate = $null
+            observedNextUpdate = $null
         }
         $crlEvidence = Get-GsaBoundedCrlEvidence -Uri ([string]$crlResource.id)
         $crlState.published = $crlEvidence.published
         $crlState.actualSha256 = $crlEvidence.actualSha256
+        $crlState.derDecoded = $crlEvidence.derDecoded
+        $crlState.observedThisUpdate = $crlEvidence.observedThisUpdate
+        $crlState.observedNextUpdate = $crlEvidence.observedNextUpdate
         $crlState.hashMatches = $crlState.actualSha256 -eq $crlState.expectedSha256
         $crlCheck = Test-GsaCrlReadiness -CrlState ([pscustomobject]$crlState)
         if ($crlCheck.actual.failureCode -eq 'HashMismatch') {
