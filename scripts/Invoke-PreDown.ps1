@@ -30,8 +30,10 @@ if ($liveReads -and $graphResources.Count -gt 0) {
         throw 'Install Microsoft.Graph.Authentication before enabling live pre-down Graph reads.'
     }
     $graphEnvironment = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ENVIRONMENT' -Default 'Global'
+    $graphExpectedAccount = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_EXPECTED_ACCOUNT' -Required
+    $graphAllowInteractive = Get-GsaBoolean -Value (Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ALLOW_INTERACTIVE' -Default 'false')
     $scopes = @('NetworkAccess.Read.All', 'NetworkAccessPolicy.Read.All', 'Policy.Read.All', 'Directory.Read.All', 'DeviceManagementConfiguration.Read.All')
-    $context = Connect-GsaGraph -Scopes $scopes -Environment $graphEnvironment -TenantId $manifest.environment.tenantId
+    $context = Connect-GsaGraph -Scopes $scopes -Environment $graphEnvironment -TenantId $manifest.environment.tenantId -ExpectedAccount $graphExpectedAccount -AllowInteractive:$graphAllowInteractive
     if ($context.TenantId -ne $manifest.environment.tenantId) {
         throw "Graph tenant '$($context.TenantId)' does not match manifest tenant '$($manifest.environment.tenantId)'."
     }

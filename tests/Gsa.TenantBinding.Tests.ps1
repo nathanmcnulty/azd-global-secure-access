@@ -1,6 +1,8 @@
 #Requires -Version 7.6
 
 BeforeAll {
+    $script:previousBetaAcceptance = $env:GSA_ACCEPT_GRAPH_BETA_TERMS
+    $env:GSA_ACCEPT_GRAPH_BETA_TERMS = 'true'
     $root = Split-Path $PSScriptRoot -Parent
     function global:Get-MgContext { [CmdletBinding()] param() }
     function global:Connect-MgGraph {
@@ -9,6 +11,8 @@ BeforeAll {
             [string[]]$Scopes,
             [string]$Environment,
             [string]$TenantId,
+            [string]$ContextScope,
+            [string]$ErrorAction,
             [switch]$NoWelcome
         )
     }
@@ -32,6 +36,7 @@ BeforeAll {
 }
 
 AfterAll {
+    $env:GSA_ACCEPT_GRAPH_BETA_TERMS = $script:previousBetaAcceptance
     Remove-Item Function:\global:Get-MgContext -ErrorAction SilentlyContinue
     Remove-Item Function:\global:Connect-MgGraph -ErrorAction SilentlyContinue
     Remove-Item Function:\global:Invoke-MgGraphRequest -ErrorAction SilentlyContinue
@@ -62,7 +67,7 @@ Describe 'Azure and Graph tenant binding before GSA mutation' {
 Describe 'Explicit Microsoft Graph tenant binding' {
     BeforeEach {
         Mock -ModuleName Gsa.Common Connect-MgGraph { throw 'must not connect unless explicitly asserted' }
-        Mock -ModuleName Gsa.Common Invoke-MgGraphRequest { throw 'must not read' }
+        Mock -ModuleName Gsa.Common Invoke-MgGraphRequest { [pscustomobject]@{ value=@() } }
     }
 
     It 'rejects an invalid target before reading or changing Graph context' -TestCases @(
@@ -76,7 +81,7 @@ Describe 'Explicit Microsoft Graph tenant binding' {
 
         Mock -ModuleName Gsa.Common Get-MgContext { throw 'must not inspect context' }
         $message = $null
-        try { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $Target } catch { $message = $_.Exception.Message }
+        try { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $Target -ExpectedAccount 'operator@example.com' } catch { $message = $_.Exception.Message }
 
         $message | Should -BeExactly 'A valid target Azure tenant ID is required before Microsoft Graph authentication.' -Because $Label
         $message | Should -Not -Match 'CANARY_'
@@ -87,10 +92,10 @@ Describe 'Explicit Microsoft Graph tenant binding' {
 
     It 'refuses a cached tenant mismatch before login even when scopes are missing' {
         Mock -ModuleName Gsa.Common Get-MgContext {
-            [pscustomobject]@{ TenantId = $foreignTenant; Environment = 'Global'; Scopes = @() }
+            [pscustomobject]@{ TenantId = $foreignTenant; Environment = 'Global'; Account='operator@example.com'; AuthType='Delegated'; ContextScope='CurrentUser'; Scopes = @() }
         }
 
-        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant } |
+        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant -ExpectedAccount 'operator@example.com' } |
             Should -Throw -ExpectedMessage 'The current Microsoft Graph context does not match the required tenant and cloud.'
         Should -Invoke -ModuleName Gsa.Common Connect-MgGraph -Times 0 -Exactly
         Should -Invoke -ModuleName Gsa.Common Invoke-MgGraphRequest -Times 0 -Exactly
@@ -98,32 +103,32 @@ Describe 'Explicit Microsoft Graph tenant binding' {
 
     It 'refuses a cached cloud mismatch before login even when scopes are missing' {
         Mock -ModuleName Gsa.Common Get-MgContext {
-            [pscustomobject]@{ TenantId = $targetTenant; Environment = 'USGov'; Scopes = @() }
+            [pscustomobject]@{ TenantId = $targetTenant; Environment = 'USGov'; Account='operator@example.com'; AuthType='Delegated'; ContextScope='CurrentUser'; Scopes = @() }
         }
 
-        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant } |
+        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant -ExpectedAccount 'operator@example.com' } |
             Should -Throw -ExpectedMessage 'The current Microsoft Graph context does not match the required tenant and cloud.'
         Should -Invoke -ModuleName Gsa.Common Connect-MgGraph -Times 0 -Exactly
     }
 
     It 'refuses a malformed cached context instead of replacing it' -TestCases @(
         @{ Context = [pscustomobject]@{} }
-        @{ Context = [pscustomobject]@{ TenantId = 'not-a-guid'; Environment = 'Global'; Scopes = @('Scope.One') } }
-        @{ Context = [pscustomobject]@{ TenantId = '11111111-1111-1111-1111-111111111111'; Environment = 'Global'; Scopes = 'Scope.One' } }
+        @{ Context = [pscustomobject]@{ TenantId = 'not-a-guid'; Environment = 'Global'; Account='operator@example.com'; AuthType='Delegated'; ContextScope='CurrentUser'; Scopes = @('Scope.One') } }
+        @{ Context = [pscustomobject]@{ TenantId = '11111111-1111-1111-1111-111111111111'; Environment = 'Global'; Account='operator@example.com'; AuthType='Delegated'; ContextScope='CurrentUser'; Scopes = 'Scope.One' } }
     ) {
         param($Context)
 
         Mock -ModuleName Gsa.Common Get-MgContext { $Context }
-        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant } |
+        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant -ExpectedAccount 'operator@example.com' } |
             Should -Throw -ExpectedMessage 'Microsoft Graph context validation failed.'
         Should -Invoke -ModuleName Gsa.Common Connect-MgGraph -Times 0 -Exactly
     }
 
     It 'reuses a matching tenant, cloud, and scope context' {
-        $context = [pscustomobject]@{ TenantId = $targetTenant; Environment = 'Global'; Scopes = @('Scope.One') }
+        $context = [pscustomobject]@{ TenantId = $targetTenant; Environment = 'Global'; Account='operator@example.com'; AuthType='Delegated'; ContextScope='CurrentUser'; Scopes = @('Scope.One') }
         Mock -ModuleName Gsa.Common Get-MgContext { $context }
 
-        $result = Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant
+        $result = Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant -ExpectedAccount 'operator@example.com'
         [object]::ReferenceEquals($result, $context) | Should -BeTrue
         Should -Invoke -ModuleName Gsa.Common Connect-MgGraph -Times 0 -Exactly
     }
@@ -133,11 +138,11 @@ Describe 'Explicit Microsoft Graph tenant binding' {
         Mock -ModuleName Gsa.Common Get-MgContext {
             $script:contextRead++
             if ($script:contextRead -eq 1) { return $null }
-            [pscustomobject]@{ TenantId = $targetTenant; Environment = 'Global'; Scopes = @('Scope.One') }
+            [pscustomobject]@{ TenantId = $targetTenant; Environment = 'Global'; Account='operator@example.com'; AuthType='Delegated'; ContextScope='CurrentUser'; Scopes = @('Scope.One') }
         }
         Mock -ModuleName Gsa.Common Connect-MgGraph {}
 
-        $result = Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId "{$targetTenant}"
+        $result = Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId "{$targetTenant}" -ExpectedAccount 'operator@example.com' -AllowInteractive:$true
         $result.TenantId | Should -BeExactly $targetTenant
         Should -Invoke -ModuleName Gsa.Common Connect-MgGraph -Times 1 -Exactly -ParameterFilter {
             $TenantId -ceq $targetTenant -and $Environment -ceq 'Global' -and
@@ -150,13 +155,13 @@ Describe 'Explicit Microsoft Graph tenant binding' {
         Mock -ModuleName Gsa.Common Get-MgContext {
             $script:contextRead++
             if ($script:contextRead -eq 1) {
-                return [pscustomobject]@{ TenantId = $targetTenant; Environment = 'Global'; Scopes = @('Scope.One') }
+                return [pscustomobject]@{ TenantId = $targetTenant; Environment = 'Global'; Account='operator@example.com'; AuthType='Delegated'; ContextScope='CurrentUser'; Scopes = @('Scope.One') }
             }
-            [pscustomobject]@{ TenantId = $targetTenant; Environment = 'Global'; Scopes = @('Scope.One', 'Scope.Two') }
+            [pscustomobject]@{ TenantId = $targetTenant; Environment = 'Global'; Account='operator@example.com'; AuthType='Delegated'; ContextScope='CurrentUser'; Scopes = @('Scope.One', 'Scope.Two') }
         }
         Mock -ModuleName Gsa.Common Connect-MgGraph {}
 
-        $result = Connect-GsaGraph -Scopes @('Scope.One', 'Scope.Two') -Environment Global -TenantId $targetTenant
+        $result = Connect-GsaGraph -Scopes @('Scope.One', 'Scope.Two') -Environment Global -TenantId $targetTenant -ExpectedAccount 'operator@example.com' -AllowInteractive:$true
         $result.Scopes | Should -Contain 'Scope.Two'
         Should -Invoke -ModuleName Gsa.Common Connect-MgGraph -Times 1 -Exactly -ParameterFilter {
             $TenantId -ceq $targetTenant -and $Environment -ceq 'Global'
@@ -167,7 +172,7 @@ Describe 'Explicit Microsoft Graph tenant binding' {
         Mock -ModuleName Gsa.Common Get-MgContext { $null }
         Mock -ModuleName Gsa.Common Connect-MgGraph {}
 
-        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant } |
+        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant -ExpectedAccount 'operator@example.com' -AllowInteractive:$true } |
             Should -Throw -ExpectedMessage 'Microsoft Graph authentication did not return the required tenant and cloud.'
         Should -Invoke -ModuleName Gsa.Common Connect-MgGraph -Times 1 -Exactly
     }
@@ -177,11 +182,11 @@ Describe 'Explicit Microsoft Graph tenant binding' {
         Mock -ModuleName Gsa.Common Get-MgContext {
             $script:contextRead++
             if ($script:contextRead -eq 1) { return $null }
-            [pscustomobject]@{ TenantId = $foreignTenant; Environment = 'Global'; Scopes = @('Scope.One') }
+            [pscustomobject]@{ TenantId = $foreignTenant; Environment = 'Global'; Account='operator@example.com'; AuthType='Delegated'; ContextScope='CurrentUser'; Scopes = @('Scope.One') }
         }
         Mock -ModuleName Gsa.Common Connect-MgGraph {}
 
-        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant } |
+        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant -ExpectedAccount 'operator@example.com' -AllowInteractive:$true } |
             Should -Throw -ExpectedMessage 'Microsoft Graph authentication did not return the required tenant and cloud.'
         Should -Invoke -ModuleName Gsa.Common Invoke-MgGraphRequest -Times 0 -Exactly
     }
@@ -191,11 +196,11 @@ Describe 'Explicit Microsoft Graph tenant binding' {
         Mock -ModuleName Gsa.Common Get-MgContext {
             $script:contextRead++
             if ($script:contextRead -eq 1) { return $null }
-            [pscustomobject]@{ TenantId = $targetTenant; Environment = 'USGov'; Scopes = @('Scope.One') }
+            [pscustomobject]@{ TenantId = $targetTenant; Environment = 'USGov'; Account='operator@example.com'; AuthType='Delegated'; ContextScope='CurrentUser'; Scopes = @('Scope.One') }
         }
         Mock -ModuleName Gsa.Common Connect-MgGraph {}
 
-        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant } |
+        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant -ExpectedAccount 'operator@example.com' -AllowInteractive:$true } |
             Should -Throw -ExpectedMessage 'Microsoft Graph authentication did not return the required tenant and cloud.'
         Should -Invoke -ModuleName Gsa.Common Invoke-MgGraphRequest -Times 0 -Exactly
     }
@@ -205,11 +210,11 @@ Describe 'Explicit Microsoft Graph tenant binding' {
         Mock -ModuleName Gsa.Common Get-MgContext {
             $script:contextRead++
             if ($script:contextRead -eq 1) { return $null }
-            [pscustomobject]@{ TenantId = $targetTenant; Environment = 'Global'; Scopes = @() }
+            [pscustomobject]@{ TenantId = $targetTenant; Environment = 'Global'; Account='operator@example.com'; AuthType='Delegated'; ContextScope='CurrentUser'; Scopes = @() }
         }
         Mock -ModuleName Gsa.Common Connect-MgGraph {}
 
-        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant } |
+        { Connect-GsaGraph -Scopes 'Scope.One' -Environment Global -TenantId $targetTenant -ExpectedAccount 'operator@example.com' -AllowInteractive:$true } |
             Should -Throw -ExpectedMessage 'Microsoft Graph consent is missing: Scope.One.'
         Should -Invoke -ModuleName Gsa.Common Invoke-MgGraphRequest -Times 0 -Exactly
     }

@@ -36,6 +36,8 @@ $plan = Get-GsaRemoteNetworkPlan -Configuration $configuration -Inventory $inven
 $cpePackage = Get-GsaCpePackage -Plan $plan
 
 if ($PSCmdlet.ParameterSetName -eq 'Apply') {
+    $graphExpectedAccount = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_EXPECTED_ACCOUNT' -Required
+    $graphAllowInteractive = Get-GsaBoolean -Value (Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ALLOW_INTERACTIVE' -Default 'false')
     if (-not $manifest) { throw 'A committed ownership manifest is required before remote-network mutation.' }
     $reviewedPlan = Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json -Depth 100
     if ($AcknowledgePlanId -ne $reviewedPlan.planId) { throw 'AcknowledgePlanId must exactly match the reviewed remote-network plan ID.' }
@@ -43,7 +45,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Apply') {
     $capability = Get-GsaCloudCapability -AzureCloud $azureCloud -GraphEnvironment $graphEnvironment
     if ($azureCloud -ne 'AzureCloud' -or $graphEnvironment -ne 'Global') { throw 'Remote-network mutation is validated only for the commercial Global Microsoft Graph endpoint.' }
     Assert-GsaCloudCapability -Capability $capability -Surface GraphMutation
-    $context = Connect-GsaGraph -Scopes @('NetworkAccess.ReadWrite.All', 'LicenseAssignment.Read.All') -Environment $graphEnvironment -TenantId $manifest.environment.tenantId
+    $context = Connect-GsaGraph -Scopes @('NetworkAccess.ReadWrite.All', 'LicenseAssignment.Read.All') -Environment $graphEnvironment -TenantId $manifest.environment.tenantId -ExpectedAccount $graphExpectedAccount -AllowInteractive:$graphAllowInteractive
     if ([string]$context.TenantId -ne [string]$manifest.environment.tenantId) { throw 'The Graph tenant does not match the ownership manifest.' }
     $currentNetworks = @(Get-GsaGraphCollection -Uri '/beta/networkAccess/connectivity/remoteNetworks' -Headers @{ Prefer = 'include-unknown-enum-members' })
     foreach ($network in $currentNetworks) {

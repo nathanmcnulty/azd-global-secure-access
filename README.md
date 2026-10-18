@@ -36,7 +36,7 @@ Run the shortest supported path:
 azd init -t nathanmcnulty/azd-global-secure-access && azd up
 ```
 
-By default, this provisions the Azure foundation without changing GSA forwarding, applications, Intune profiles, certificates, or Conditional Access. Graph-enabled commands require an explicit valid target tenant, reuse only a matching cached tenant and cloud, and pass that tenant to normal Microsoft Graph browser authentication when interaction is needed. They do not use device-code authentication.
+By default, this provisions the Azure foundation without changing GSA forwarding, applications, Intune profiles, certificates, or Conditional Access. Before enabling Graph-enabled commands, set `GSA_GRAPH_EXPECTED_ACCOUNT` to the exact delegated operator UPN; `GSA_GRAPH_ALLOW_INTERACTIVE` defaults to `false` and must be explicitly enabled to permit the normal broker/browser login when no usable cached context exists. Graph-enabled commands reuse only a matching delegated account, tenant, cloud, context scope, and permission set, then perform one read-only forwarding-profile probe. They do not use device-code authentication. See the [Graph session configuration](docs/technical-reference.md#configuration) details.
 
 Before provisioning, the template shows the selected environment and safety gates. For an additional Azure-only preview, run `azd provision --preview` from the initialized project.
 

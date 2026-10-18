@@ -49,7 +49,7 @@ function Get-GsaBoundedCrlEvidence {
         actualSha256 = $(if ($Case -eq 'wrongType') { $null } else { [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]](1,2,3,4))) })
     }
 }
-function Connect-GsaGraph { throw 'FORBIDDEN_DISPATCH' }
+function Connect-GsaGraph { param($Scopes, $Environment, $TenantId, $ExpectedAccount, [bool]$AllowInteractive); throw 'FORBIDDEN_DISPATCH' }
 function Invoke-MgGraphRequest { throw 'FORBIDDEN_DISPATCH' }
 function Connect-AzAccount { throw 'FORBIDDEN_DISPATCH' }
 function Invoke-CrlRenewal { throw 'FORBIDDEN_DISPATCH' }

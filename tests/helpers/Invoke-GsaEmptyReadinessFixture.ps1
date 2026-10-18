@@ -15,14 +15,17 @@ function Get-GsaEnvironmentValue {
     switch ($Name) {
         'AZURE_TENANT_ID' { return '11111111-1111-1111-1111-111111111111' }
         'GSA_CONNECTOR_GROUP_ID' { return '22222222-2222-2222-2222-222222222222' }
+        'GSA_GRAPH_EXPECTED_ACCOUNT' { return 'operator@example.com' }
+        'GSA_GRAPH_ALLOW_INTERACTIVE' { return 'false' }
         default { return $Default }
     }
 }
 function Get-GsaStatePath { param([switch]$Pending) Join-Path $ScratchPath 'absent-state.json' }
 function Read-GsaStateManifest { param($Path) return $null }
 function Connect-GsaGraph {
-    param($Scopes, $Environment, $TenantId)
+    param($Scopes, $Environment, $TenantId, $ExpectedAccount, [bool]$AllowInteractive)
     if ($TenantId -ne '11111111-1111-1111-1111-111111111111') { throw 'FORBIDDEN_TARGET' }
+    if ($ExpectedAccount -cne 'operator@example.com' -or $AllowInteractive) { throw 'FORBIDDEN_GRAPH_ACCOUNT_OPTIONS' }
     [pscustomobject]@{ TenantId=$TenantId; Environment=$Environment; Scopes=$Scopes }
 }
 function Get-GsaTenantStatus {

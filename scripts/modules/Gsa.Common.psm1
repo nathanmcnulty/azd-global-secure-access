@@ -112,14 +112,25 @@ function Connect-GsaGraph {
         [Parameter(Mandatory)]
         [AllowNull()]
         [AllowEmptyString()]
-        [string]$TenantId
+        [string]$TenantId,
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$ExpectedAccount,
+        [bool]$AllowInteractive = $false
     )
+
+    $expectedAccountName = ([string]$ExpectedAccount).Trim()
+    if ($expectedAccountName -notmatch '^[^@\s]+@[^@\s]+$') {
+        throw 'ExpectedAccount must be a nonempty user principal name.'
+    }
 
     $targetTenant = [guid]::Empty
     if (-not [guid]::TryParse($TenantId, [ref]$targetTenant) -or $targetTenant -eq [guid]::Empty) {
         throw 'A valid target Azure tenant ID is required before Microsoft Graph authentication.'
     }
     $normalizedTenantId = $targetTenant.ToString('D')
+    Assert-GsaPreviewGate -Feature 'Global Secure Access Graph session probe' -Enabled $true
 
     $getContextState = {
         param([AllowNull()][object]$Context)
@@ -127,13 +138,20 @@ function Connect-GsaGraph {
         if (-not $Context) { return $null }
         if (-not $Context.PSObject.Properties['TenantId'] -or
             -not $Context.PSObject.Properties['Environment'] -or
-            -not $Context.PSObject.Properties['Scopes']) {
+            -not $Context.PSObject.Properties['Scopes'] -or
+            -not $Context.PSObject.Properties['AuthType'] -or
+            -not $Context.PSObject.Properties['Account'] -or
+            -not $Context.PSObject.Properties['ContextScope']) {
             throw 'Microsoft Graph context validation failed.'
         }
         $contextTenant = [guid]::Empty
         if (-not [guid]::TryParse([string]$Context.TenantId, [ref]$contextTenant) -or
             $contextTenant -eq [guid]::Empty -or
             [string]::IsNullOrWhiteSpace([string]$Context.Environment) -or
+            [string]$Context.AuthType -ine 'Delegated' -or
+            [string]::IsNullOrWhiteSpace([string]$Context.Account) -or
+            [string]$Context.Account -ine $expectedAccountName -or
+            [string]$Context.ContextScope -notin @('CurrentUser', 'Process') -or
             $null -eq $Context.Scopes -or
             $Context.Scopes -is [string] -or
             $Context.Scopes -isnot [System.Collections.IEnumerable]) {
@@ -142,6 +160,9 @@ function Connect-GsaGraph {
         return [pscustomobject]@{
             Tenant      = $contextTenant
             Environment = [string]$Context.Environment
+            AuthType    = [string]$Context.AuthType
+            Account     = [string]$Context.Account
+            ContextScope = [string]$Context.ContextScope
             Scopes      = @($Context.Scopes)
         }
     }
@@ -160,13 +181,23 @@ function Connect-GsaGraph {
         if ($state) { $Scopes | Where-Object { $_ -notin $state.Scopes } } else { $Scopes }
     )
     if (-not $state -or $missing.Count -gt 0) {
-        Connect-MgGraph -TenantId $normalizedTenantId -Scopes $Scopes -Environment $Environment -NoWelcome | Out-Null
+        if (-not $AllowInteractive) {
+            throw 'A usable Microsoft Graph context is required when interactive authentication is not authorized.'
+        }
+        try {
+            Connect-MgGraph -TenantId $normalizedTenantId -Scopes $Scopes -Environment $Environment -ContextScope CurrentUser -NoWelcome -ErrorAction Stop | Out-Null
+        } catch {
+            throw 'Interactive Microsoft Graph authentication through the normal broker or browser flow failed.'
+        }
         try {
             $context = Get-MgContext -ErrorAction Stop
         } catch {
             throw 'Microsoft Graph context validation failed.'
         }
         $state = & $getContextState $context
+        if ($state -and $state.ContextScope -ine 'CurrentUser') {
+            throw 'Microsoft Graph authentication did not return the requested CurrentUser context.'
+        }
     }
 
     if (-not $state -or $state.Tenant -ne $targetTenant -or $state.Environment -ne $Environment) {
@@ -175,6 +206,11 @@ function Connect-GsaGraph {
     $missing = @($Scopes | Where-Object { $_ -notin $state.Scopes })
     if ($missing.Count -gt 0) {
         throw "Microsoft Graph consent is missing: $($missing -join ', ')."
+    }
+    try {
+        Invoke-MgGraphRequest -Method GET -Uri '/beta/networkAccess/forwardingProfiles' -OutputType PSObject -ErrorAction Stop | Out-Null
+    } catch {
+        throw 'The Microsoft Graph delegated session failed the read-only usability probe.'
     }
     return $context
 }
