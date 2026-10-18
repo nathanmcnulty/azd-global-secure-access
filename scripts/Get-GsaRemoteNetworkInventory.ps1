@@ -15,11 +15,13 @@ Import-Module (Join-Path $modulePath 'Gsa.RemoteNetwork.psm1') -Force
 Assert-GsaPreviewGate -Feature 'Global Secure Access remote-network inventory' -Enabled $true
 $azureCloud = Get-GsaEnvironmentValue -Name 'AZURE_CLOUD_NAME' -Default 'AzureCloud'
 $graphEnvironment = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ENVIRONMENT' -Default 'Global'
+$graphExpectedAccount = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_EXPECTED_ACCOUNT' -Required
+$graphAllowInteractive = Get-GsaBoolean -Value (Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ALLOW_INTERACTIVE' -Default 'false')
 $capability = Get-GsaCloudCapability -AzureCloud $azureCloud -GraphEnvironment $graphEnvironment
 Assert-GsaCloudCapability -Capability $capability -Surface GraphCoreRead
 
 $azureTenantId = Get-GsaEnvironmentValue -Name 'AZURE_TENANT_ID' -Required
-$context = Connect-GsaGraph -Scopes @('NetworkAccess.Read.All', 'Policy.Read.All', 'LicenseAssignment.Read.All') -Environment $graphEnvironment -TenantId $azureTenantId
+$context = Connect-GsaGraph -Scopes @('NetworkAccess.Read.All', 'Policy.Read.All', 'LicenseAssignment.Read.All') -Environment $graphEnvironment -TenantId $azureTenantId -ExpectedAccount $graphExpectedAccount -AllowInteractive:$graphAllowInteractive
 $remoteNetworks = @(Get-GsaGraphCollection -Uri '/beta/networkAccess/connectivity/remoteNetworks' -Headers @{ Prefer = 'include-unknown-enum-members' })
 foreach ($network in $remoteNetworks) {
     $links = @(Get-GsaGraphCollection -Uri "/beta/networkAccess/connectivity/remoteNetworks/$($network.id)/deviceLinks" -Headers @{ Prefer = 'include-unknown-enum-members' })

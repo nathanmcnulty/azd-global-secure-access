@@ -31,12 +31,14 @@ Import-Module (Join-Path $modulePath 'Gsa.Cleanup.psm1') -Force
 Assert-GsaPreviewGate -Feature 'Global Secure Access forwarding outage recovery' -Enabled $true
 $azureCloud = Get-GsaEnvironmentValue -Name 'AZURE_CLOUD_NAME' -Default 'AzureCloud'
 $graphEnvironment = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ENVIRONMENT' -Default 'Global'
+$graphExpectedAccount = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_EXPECTED_ACCOUNT' -Required
+$graphAllowInteractive = Get-GsaBoolean -Value (Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ALLOW_INTERACTIVE' -Default 'false')
 $capability = Get-GsaCloudCapability -AzureCloud $azureCloud -GraphEnvironment $graphEnvironment
 Assert-GsaCloudCapability -Capability $capability -Surface ForwardingMutation
 $manifest = Read-GsaStateManifest
 if (-not $manifest) { throw 'A committed ownership manifest is required for forwarding recovery.' }
 if (-not (Get-Module -ListAvailable Microsoft.Graph.Authentication)) { throw 'Install Microsoft.Graph.Authentication before forwarding recovery.' }
-$context = Connect-GsaGraph -Scopes @('NetworkAccess.ReadWrite.All') -Environment $graphEnvironment -TenantId $manifest.environment.tenantId
+$context = Connect-GsaGraph -Scopes @('NetworkAccess.ReadWrite.All') -Environment $graphEnvironment -TenantId $manifest.environment.tenantId -ExpectedAccount $graphExpectedAccount -AllowInteractive:$graphAllowInteractive
 if ($context.TenantId -ne $manifest.environment.tenantId) { throw 'The Graph tenant does not match the ownership manifest.' }
 
 function Get-ForwardingObservation {

@@ -43,7 +43,7 @@ function az {
 
 $global:gsaFixtureConnects = 0
 $global:gsaFixtureGraphReads = 0
-function Connect-GsaGraph { $global:gsaFixtureConnects++; throw 'FORBIDDEN_CONNECT' }
+function Connect-GsaGraph { param($Scopes, $Environment, $TenantId, $ExpectedAccount, [bool]$AllowInteractive); $global:gsaFixtureConnects++; throw 'FORBIDDEN_CONNECT' }
 function Invoke-MgGraphRequest { $global:gsaFixtureGraphReads++; throw 'FORBIDDEN_DISPATCH' }
 function Get-GsaTenantStatus { $global:gsaFixtureGraphReads++; throw 'FORBIDDEN_DISPATCH' }
 

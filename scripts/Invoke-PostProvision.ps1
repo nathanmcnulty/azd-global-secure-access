@@ -77,6 +77,8 @@ $desiredState = [ordered]@{
 }
 
 if ($graphNeeded) {
+    $graphExpectedAccount = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_EXPECTED_ACCOUNT' -Required
+    $graphAllowInteractive = Get-GsaBoolean -Value (Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ALLOW_INTERACTIVE' -Default 'false')
     Assert-GsaCloudCapability -Capability $capability -Surface GraphCoreRead
     if ($profileStates.Count -gt 0) {
         Assert-GsaCloudCapability -Capability $capability -Surface ForwardingMutation
@@ -118,7 +120,7 @@ if ($graphNeeded) {
     }
     $azureAccount = ($accountJson -join "`n") | ConvertFrom-Json
     Assert-GsaAzureTenantBinding -SubscriptionId $azureSubscriptionId -AzureTenantId $azureTenantId -AzureAccount $azureAccount
-    $graphContext = Connect-GsaGraph -Scopes @($scopes | Select-Object -Unique) -Environment $graphEnvironment -TenantId $azureTenantId
+    $graphContext = Connect-GsaGraph -Scopes @($scopes | Select-Object -Unique) -Environment $graphEnvironment -TenantId $azureTenantId -ExpectedAccount $graphExpectedAccount -AllowInteractive:$graphAllowInteractive
     Assert-GsaTenantBinding -SubscriptionId $azureSubscriptionId -AzureTenantId $azureTenantId -AzureAccount $azureAccount -GraphContext $graphContext
     $results.TenantStatus = Get-GsaTenantStatus
 }

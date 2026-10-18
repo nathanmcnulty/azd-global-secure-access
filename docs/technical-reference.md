@@ -128,12 +128,28 @@ Post-provision also compares the configured subscription and tenant with
 `az account show` before Graph login or consent, then retains the combined
 Azure/Graph tenant check after connection. A
 cached context is reused only when its tenant and Graph cloud both match. A
-mismatch fails before login or consent; an absent matching context or missing
-scope starts normal browser authentication with the exact target tenant, then
-tenant, cloud and scopes are checked again. Readiness reports a failed tenant
+mismatch fails before login or consent. An absent matching context or missing
+scope permits normal broker/browser authentication only with explicit interaction
+authorization and the exact target tenant; its resulting context is checked
+again. Readiness reports a failed tenant
 consistency check and makes no Graph request when its configured tenant is absent
-or invalid. This binding does not verify a current Azure CLI login and does not
-replace the broader account/probe/interaction qualification tracked in GSA-003.
+or invalid. Every Graph caller also requires `GSA_GRAPH_EXPECTED_ACCOUNT` and
+checks the cached context for delegated `AuthType`, the expected `Account`, and
+`ContextScope` of `CurrentUser` or `Process`. `GSA_GRAPH_ALLOW_INTERACTIVE`
+defaults to false; only true explicitly permits the normal broker/browser login
+when no usable context or required scopes exist. After context validation the
+helper performs exactly one read-only `GET /beta/networkAccess/forwardingProfiles`
+probe, covered by the existing `NetworkAccess.Read.All` or
+`NetworkAccess.ReadWrite.All` scope. The helper requires the existing
+`GSA_ACCEPT_GRAPH_BETA_TERMS` acceptance before inspecting context or starting
+authentication, including direct invocation. A probe failure is sanitized and never
+triggers an automatic login retry. Process-scoped contexts remain supported for
+this local hook workflow because Microsoft Graph PowerShell supports that scope;
+unknown or missing context scope fails closed. Helper-initiated login explicitly
+requests `CurrentUser`, and a different returned scope is rejected. The helper
+makes one SDK invocation; SDK transport retries and timing are unchanged. This validates the usability of
+the existing delegated SDK session, not full authentication, service readiness,
+endpoint behavior, or operator authorization.
 
 ### Connector prerequisite
 
@@ -177,6 +193,8 @@ The pre-provision hook supplies safe defaults for:
 | `AZURE_RESOURCE_GROUP` | `rg-<env>-gsa` | Resource group name |
 | `AZURE_CLOUD_NAME` | active Azure CLI cloud | Persisted by pre-provision after endpoint validation |
 | `GSA_GRAPH_ENVIRONMENT` | `Global` for `AzureCloud`; `China` for `AzureChinaCloud` | Microsoft Graph PowerShell environment; US Government requires explicit `USGov` or `USGovDoD` because the Azure cloud alone cannot distinguish L4 from L5 |
+| `GSA_GRAPH_EXPECTED_ACCOUNT` | empty | Required expected delegated operator UPN for every Graph-enabled caller; malformed or missing values fail closed before context inspection |
+| `GSA_GRAPH_ALLOW_INTERACTIVE` | `false` | Allows the normal Microsoft Graph broker/browser login when no usable cached context exists; no alternate authentication flow is used |
 | `GSA_ORGANIZATION_NAME` | azd environment name | Certificate organization and naming input |
 | `AZURE_PRINCIPAL_ID` | current token `oid` | Principal receiving data-plane roles |
 | `AZURE_PRINCIPAL_TYPE` | inferred | `User`, `ServicePrincipal`, or `Group` |
@@ -742,11 +760,15 @@ body size or total wall time, and offline SDK-boundary fixtures do not prove a
 live cloud response.
 
 The delegated-authentication comparison is pinned to `azd-reference` revision
-`d4d2fee7440b2dc700d2e7898cc0c932b9300314`. Its component requires an explicit
-tenant, expected account, probe URI and opt-in interaction/context replacement.
-This solution does not yet supply all of those inputs, so adoption remains
-separate work. This pagination change adds no login, consent, scope, dependency
-or runtime component.
+`d4d2fee7440b2dc700d2e7898cc0c932b9300314`. This solution adopts the relevant
+local guard contract without vendoring the component or adding a runtime
+dependency. The deliberate difference is that this solution preserves the
+Graph SDK's supported `Process` context scope for local hooks; the comparison
+component requires `CurrentUser` persistence and separately authorizes context
+replacement. See Microsoft's [Graph authentication command reference](https://learn.microsoft.com/en-us/powershell/microsoftgraph/authentication-commands)
+and the [GSA forwarding-profile read contract](https://learn.microsoft.com/en-us/graph/api/networkaccess-networkaccessroot-list-forwardingprofiles?view=graph-rest-beta)
+for the session and permission boundaries. No scope, SDK dependency or component
+pin changes are introduced.
 
 ### CRL evidence boundaries
 

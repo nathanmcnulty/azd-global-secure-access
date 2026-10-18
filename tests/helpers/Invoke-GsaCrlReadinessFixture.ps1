@@ -56,7 +56,7 @@ function Get-GsaBoundedCrlEvidence {
         observedNextUpdate = $null
     }
 }
-function Connect-GsaGraph { throw 'FORBIDDEN_DISPATCH' }
+function Connect-GsaGraph { param($Scopes, $Environment, $TenantId, $ExpectedAccount, [bool]$AllowInteractive); throw 'FORBIDDEN_DISPATCH' }
 function Invoke-MgGraphRequest { throw 'FORBIDDEN_DISPATCH' }
 function Connect-AzAccount { throw 'FORBIDDEN_DISPATCH' }
 function Invoke-CrlRenewal { throw 'FORBIDDEN_DISPATCH' }

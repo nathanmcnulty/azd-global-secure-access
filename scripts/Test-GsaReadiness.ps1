@@ -136,6 +136,8 @@ if (-not $capability.GraphCoreRead) {
         -Detail 'A valid AZURE_TENANT_ID is required before Microsoft Graph authentication.' `
         -Expected 'Nonzero Azure tenant GUID' -Actual $null)
 } else {
+    $graphExpectedAccount = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_EXPECTED_ACCOUNT' -Required
+    $graphAllowInteractive = Get-GsaBoolean -Value (Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ALLOW_INTERACTIVE' -Default 'false')
     $scopes = [System.Collections.Generic.List[string]]::new()
     $scopes.Add('NetworkAccess.Read.All')
     $scopes.Add('NetworkAccessPolicy.Read.All')
@@ -149,7 +151,7 @@ if (-not $capability.GraphCoreRead) {
         $scopes.Add('Policy.Read.All')
     }
 
-    $graphContext = Connect-GsaGraph -Scopes @($scopes | Select-Object -Unique) -Environment $graphEnvironment -TenantId $azureTenantId
+    $graphContext = Connect-GsaGraph -Scopes @($scopes | Select-Object -Unique) -Environment $graphEnvironment -TenantId $azureTenantId -ExpectedAccount $graphExpectedAccount -AllowInteractive:$graphAllowInteractive
     Add-GsaCheck (ConvertTo-GsaReadinessCheck -Name 'Required Graph scopes' -Status 'Pass' -Classification 'reused' `
         -Detail "The current context contains all required read scopes: $($scopes -join ', ')." `
         -Expected @($scopes) -Actual @($graphContext.Scopes))
