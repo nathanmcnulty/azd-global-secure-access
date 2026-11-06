@@ -4,6 +4,11 @@ BeforeAll {
     $fixture = Join-Path $PSScriptRoot 'helpers/Invoke-GsaModuleLoadingFixture.ps1'
 }
 Describe 'Real module dependency loading' {
+    It 'commits safe foundation ownership state without cloud calls in a fresh process' {
+        $output = & (Get-Process -Id $PID).Path -NoProfile -File $fixture -Root $root -Mode PostProvisionState 2>&1
+        $LASTEXITCODE | Should -Be 0 -Because ($output | Out-String)
+        $output | Should -Contain 'Foundation state committed without cloud calls.'
+    }
     It 'runs the safe postprovision hook without cloud calls in a fresh process' {
         $output = & (Get-Process -Id $PID).Path -NoProfile -File $fixture -Root $root -Mode PostProvision 2>&1
         $LASTEXITCODE | Should -Be 0 -Because ($output | Out-String)

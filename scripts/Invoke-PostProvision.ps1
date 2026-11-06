@@ -334,13 +334,13 @@ if (-not $WhatIfPreference) {
             -Ownership managed -Provenance declared
     }
 
-    if ($results.TenantStatus) {
+    if ($results['TenantStatus']) {
         Add-GsaStateResource -Key 'networkAccess:tenantStatus' -Kind 'Microsoft.Graph/networkAccess/tenantStatus' `
             -Id $results.TenantStatus.id -NaturalId @{ tenantId = $environmentIdentity.tenantId } `
             -Desired @{ onboardingStatus = [string]$results.TenantStatus.onboardingStatus } `
             -Observed $results.TenantStatus -ReadUri '/beta/networkAccess/tenantStatus' -Created:$false
     }
-    foreach ($forwardingProfile in @($results.ForwardingProfiles)) {
+    foreach ($forwardingProfile in $results['ForwardingProfiles']) {
         Add-GsaStateResource -Key "forwardingProfile:$($forwardingProfile.TrafficType)" -Kind 'Microsoft.Graph/networkAccess/forwardingProfile' `
             -Id $forwardingProfile.Id -NaturalId @{ trafficForwardingType = $forwardingProfile.TrafficType } `
             -Desired @{ state = $forwardingProfile.State; trafficForwardingType = $forwardingProfile.TrafficType } `
@@ -380,7 +380,7 @@ if (-not $WhatIfPreference) {
             -Observed @{ id = $connectorGroupText } `
             -ReadUri "/beta/onPremisesPublishingProfiles/applicationProxy/connectorGroups/$connectorGroupText" -Created:$false
     }
-    if ($results.InternetBaseline) {
+    if ($results['InternetBaseline']) {
         $baseline = $results.InternetBaseline
         Add-GsaStateResource -Key "filteringPolicy:$($baseline.FilteringPolicyName)" -Kind 'Microsoft.Graph/networkAccess/filteringPolicy' `
             -Id $baseline.FilteringPolicyId -NaturalId @{ name = $baseline.FilteringPolicyName } `
