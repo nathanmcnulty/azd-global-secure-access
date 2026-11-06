@@ -2,7 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $commonPath = Join-Path $PSScriptRoot 'Gsa.Common.psm1'
-Import-Module $commonPath -Force
+Import-Module $commonPath
 
 function Get-GsaTenantStatus {
     [CmdletBinding()]

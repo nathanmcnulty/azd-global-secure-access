@@ -111,10 +111,10 @@ Generate the non-destructive cleanup plan, review it, and then remove Azure reso
 
 ```powershell
 azd hooks run predown
-azd down --purge
+azd down
 ```
 
-The plan uses only exact IDs from the committed ownership manifest and performs no Graph mutation. Purge protection prevents immediate permanent deletion of the Key Vault. Tenant cleanup is intentionally separate; follow the ownership-aware [cleanup procedure](docs/technical-reference.md#cleanup) and preserve every reused or unmanaged object.
+The plan uses only exact IDs from the committed ownership manifest and performs no Graph mutation. The purge-protected Key Vault remains soft-deleted for its 90-day retention period; omit `--purge` because immediate permanent deletion is blocked. Tenant cleanup is intentionally separate; follow the ownership-aware [cleanup procedure](docs/technical-reference.md#cleanup) and preserve every reused or unmanaged object.
 
 ## Security and support
 

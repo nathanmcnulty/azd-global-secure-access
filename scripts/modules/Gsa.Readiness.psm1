@@ -1,7 +1,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module (Join-Path $PSScriptRoot 'Gsa.State.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Gsa.State.psm1')
 
 function ConvertTo-GsaReadinessCheck {
     [CmdletBinding()]

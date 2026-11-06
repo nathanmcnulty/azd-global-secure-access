@@ -596,10 +596,10 @@ Generate the non-destructive cleanup plan and then remove Azure resources:
 
 ```powershell
 azd hooks run predown
-azd down --purge
+azd down
 ```
 
-The `predown` hook writes deterministic `gsa-cleanup-plan.json` and `gsa-cleanup-plan.txt` artifacts under `.azure/<environment>`. It uses only the committed manifest's exact object IDs, blocks stale, missing, drifted, transitional, and unobserved tenant objects, and performs no Microsoft Graph mutation. Set `GSA_PREDOWN_LIVE_GRAPH_READS=true` only when the required read scopes and Graph beta acceptance are available; otherwise Graph-owned actions are conservatively blocked as unobserved. Purge protection prevents immediate permanent deletion of the Key Vault. Plan for the retention period.
+The `predown` hook writes deterministic `gsa-cleanup-plan.json` and `gsa-cleanup-plan.txt` artifacts under `.azure/<environment>`. It uses only the committed manifest's exact object IDs, blocks stale, missing, drifted, transitional, and unobserved tenant objects, and performs no Microsoft Graph mutation. Set `GSA_PREDOWN_LIVE_GRAPH_READS=true` only when the required read scopes and Graph beta acceptance are available; otherwise Graph-owned actions are conservatively blocked as unobserved. The purge-protected Key Vault remains soft-deleted for its 90-day retention period. Omit `--purge`; immediate permanent deletion is blocked, and the retained name cannot be reused until the retention period ends or the vault is recovered.
 
 Tenant cleanup remains a separate reviewed workflow:
 
