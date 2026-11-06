@@ -78,11 +78,19 @@ if ([string]::IsNullOrWhiteSpace($env:AZURE_PRINCIPAL_ID)) {
     Initialize-AzdEnvironmentValue -Name 'AZURE_PRINCIPAL_TYPE' -Value $principal.Type
 }
 
+$profileChanges = @(
+    foreach ($name in 'GSA_M365_PROFILE_STATE', 'GSA_PRIVATE_PROFILE_STATE', 'GSA_INTERNET_PROFILE_STATE') {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if ($value -and $value.ToLowerInvariant() -notin 'enabled', 'disabled', 'unchanged') {
+            throw "$name must be Enabled, Disabled, or Unchanged."
+        }
+        if ($value -and $value -ine 'Unchanged') { $name }
+    }
+)
+
 $previewFeatures = @(
     Get-GsaBoolean $env:GSA_ENABLE_TENANT_ONBOARDING
-    -not [string]::IsNullOrWhiteSpace($env:GSA_M365_PROFILE_STATE)
-    -not [string]::IsNullOrWhiteSpace($env:GSA_PRIVATE_PROFILE_STATE)
-    -not [string]::IsNullOrWhiteSpace($env:GSA_INTERNET_PROFILE_STATE)
+    ($profileChanges.Count -gt 0)
     Get-GsaBoolean $env:GSA_ENABLE_QUICK_ACCESS
     Get-GsaBoolean $env:GSA_ENABLE_PRIVATE_ACCESS_APP
     Get-GsaBoolean $env:GSA_ENABLE_TLS_INSPECTION
@@ -93,9 +101,7 @@ if ($previewFeatures -contains $true) {
     $graphEnvironment = Get-GsaEnvironmentValue -Name 'GSA_GRAPH_ENVIRONMENT' -Required
     $capability = Get-GsaCloudCapability -AzureCloud $cloud.name -GraphEnvironment $graphEnvironment
     Assert-GsaCloudCapability -Capability $capability -Surface GraphCoreRead
-    if (@('GSA_M365_PROFILE_STATE', 'GSA_PRIVATE_PROFILE_STATE', 'GSA_INTERNET_PROFILE_STATE') | Where-Object {
-        -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_))
-    }) {
+    if ($profileChanges.Count -gt 0) {
         Assert-GsaCloudCapability -Capability $capability -Surface ForwardingMutation
     }
     if (Get-GsaBoolean $env:GSA_ENABLE_TENANT_ONBOARDING) {
@@ -110,13 +116,6 @@ if ($previewFeatures -contains $true) {
     }
     if (Get-GsaBoolean $env:GSA_ENABLE_INTERNET_BASELINE) {
         Assert-GsaCloudCapability -Capability $capability -Surface Filtering
-    }
-}
-
-foreach ($name in 'GSA_M365_PROFILE_STATE', 'GSA_PRIVATE_PROFILE_STATE', 'GSA_INTERNET_PROFILE_STATE') {
-    $value = [Environment]::GetEnvironmentVariable($name)
-    if ($value -and $value.ToLowerInvariant() -notin 'enabled', 'disabled', 'unchanged') {
-        throw "$name must be Enabled, Disabled, or Unchanged."
     }
 }
 
