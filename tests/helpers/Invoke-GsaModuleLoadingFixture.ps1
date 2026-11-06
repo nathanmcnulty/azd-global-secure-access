@@ -50,5 +50,10 @@ try {
     }
 } finally {
     Pop-Location
-    Remove-Item -LiteralPath $tempRoot -Recurse -Force
+    $resolvedTempRoot = (Resolve-Path -LiteralPath $tempRoot).Path
+    if ($resolvedTempRoot -cne [IO.Path]::GetFullPath($tempRoot) -or
+        [IO.Path]::GetDirectoryName($resolvedTempRoot).TrimEnd('\', '/') -ine [IO.Path]::GetTempPath().TrimEnd('\', '/')) {
+        throw 'Fixture cleanup target is outside its exact temporary directory.'
+    }
+    Remove-Item -LiteralPath $resolvedTempRoot -Recurse -Force
 }
