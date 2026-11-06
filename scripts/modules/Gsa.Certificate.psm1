@@ -1,7 +1,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module (Join-Path $PSScriptRoot 'Gsa.Common.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Gsa.Common.psm1')
 
 function ConvertTo-GsaBase64Url {
     param([Parameter(Mandatory)][byte[]]$Bytes)

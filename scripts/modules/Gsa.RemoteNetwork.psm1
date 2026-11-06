@@ -1,8 +1,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module (Join-Path $PSScriptRoot 'Gsa.State.psm1') -Force
-Import-Module (Join-Path $PSScriptRoot 'Gsa.Readiness.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Gsa.State.psm1')
+Import-Module (Join-Path $PSScriptRoot 'Gsa.Readiness.psm1')
 
 $script:ValidRemoteNetworkRegions = @(
     'australiaEast', 'australiaSouthEast', 'brazilSouth', 'canadaCentral', 'canadaEast', 'centralIndia',

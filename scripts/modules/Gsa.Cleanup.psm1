@@ -2,7 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $stateModulePath = Join-Path $PSScriptRoot 'Gsa.State.psm1'
-Import-Module $stateModulePath -Force
+Import-Module $stateModulePath
 
 function Get-GsaCleanupArtifactPath {
     [CmdletBinding()]
